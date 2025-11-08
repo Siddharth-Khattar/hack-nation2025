@@ -24,11 +24,11 @@ from .scrape_schema import (
 
 from .vector_schema import (
     Vector,
-    VectorBase,
+    VectorEmbedding,
+    VectorEmbeddingCreate,
     Dataset,
-    DatasetBase,
-    VectorResponse,
-    DatasetResponse,
+    SimilarityResult,
+    SimilaritySearchResponse,
 )
 
 __all__ = [
@@ -50,9 +50,9 @@ __all__ = [
     "ShouldRunScrapeResponse",
     # Vector schemas
     "Vector",
-    "VectorBase",
+    "VectorEmbedding",
+    "VectorEmbeddingCreate",
     "Dataset",
-    "DatasetBase",
-    "VectorResponse",
-    "DatasetResponse",
+    "SimilarityResult",
+    "SimilaritySearchResponse",
 ]

@@ -7,7 +7,7 @@ from pydantic import BaseModel
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.core.config import settings
-from app.schemas.schemas import Dataset
+from app.schemas.vector_schema import Dataset, Vector
 
 T = TypeVar('T', bound=BaseModel)
 

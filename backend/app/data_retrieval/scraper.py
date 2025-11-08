@@ -27,7 +27,7 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
     
     try:
         # Initialize clients
-        logger.info("\n📡 Step 1/5: Initializing API clients...")
+        logger.info("\n📡 Step 1/6: Initializing API clients...")
         polymarket_api = PolymarketAPI()
         supabase = SupabaseClient(supabase_url, supabase_api_key)
         
@@ -38,7 +38,7 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
         tracker.cleanup_stale_scrapes()
         
         # Check if we should run the scrape
-        logger.info("\n🔍 Step 2/5: Checking scrape eligibility...")
+        logger.info("\n🔍 Step 2/6: Checking scrape eligibility...")
         should_run, reason = tracker.should_run_scrape(min_interval_minutes=55)
         
         if not should_run:
@@ -54,11 +54,11 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
             logger.warning("⚠️  Could not start scrape tracking, continuing anyway...")
         
         # Ensure the table exists
-        logger.info("\n🗄️  Step 3/5: Setting up database table...")
+        logger.info("\n🗄️  Step 3/6: Setting up database tables...")
         supabase.create_markets_table()
 
         # Scrape active markets
-        logger.info("\n📥 Step 4/5: Fetching markets from Polymarket API...")
+        logger.info("\n📥 Step 4/6: Fetching markets from Polymarket API...")
         active_markets = polymarket_api.get_active_markets()
         
         if not active_markets:
@@ -69,7 +69,7 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
         markets_fetched = len(active_markets)
         
         # Prepare data for Supabase
-        logger.info("\n🔄 Step 5/5: Preparing and importing data to Supabase...")
+        logger.info("\n🔄 Step 5/6: Preparing and importing data to Supabase...")
         logger.info(f"Processing {markets_fetched} markets...")
         
         markets_to_import = []
@@ -144,6 +144,45 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
             supabase.import_markets(markets_to_import)
             markets_added = len(markets_to_import)
             markets_failed = skipped
+            
+            # Create embeddings for new markets
+            logger.info("\n🧠 Step 6/6: Creating embeddings for markets...")
+            try:
+                from ..services.vector_service import get_vector_service
+                from ..services.database_service import get_database_service
+                
+                # Use async wrapper for embedding creation
+                import asyncio
+                
+                async def create_embeddings_async():
+                    vs = get_vector_service()
+                    db = get_database_service()
+                    
+                    # Get all markets
+                    markets = await db.get_markets(limit=10000)
+                    
+                    # Find markets that need embeddings (BATCH CHECK!)
+                    all_embeddings = await db.get_all_embeddings(limit=100000)
+                    existing_ids = {emb.market_id for emb in all_embeddings}
+                    needs_embedding = [m.id for m in markets if m.id not in existing_ids]
+                    
+                    if not needs_embedding:
+                        logger.info("  All markets already have embeddings")
+                        return 0
+                    
+                    logger.info(f"  Creating embeddings for {len(needs_embedding)} markets in batches...")
+                    
+                    # Batch create embeddings (much faster!)
+                    result = await vs.batch_create_embeddings(needs_embedding, batch_size=100)
+                    
+                    return result['created']
+                
+                # Run async function
+                embeddings_created = asyncio.run(create_embeddings_async())
+                logger.info(f"✅ Created {embeddings_created} new embeddings")
+                
+            except Exception as e:
+                logger.warning(f"⚠️  Embedding creation failed (non-critical): {e}")
         else:
             logger.warning("⚠️  No valid markets to import after processing!")
 
