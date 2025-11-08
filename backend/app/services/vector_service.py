@@ -29,27 +29,43 @@ class VectorService:
     # ==================== CREATE & STORE EMBEDDINGS ====================
     
     async def create_and_store_embedding(self, market_id: int) -> VectorEmbedding:
-        """Create embedding for a market and store it in database."""
+        """Create embedding for a market using AI-generated topics and store it in database."""
         try:
             # Get market
             market = await self.db_service.get_market_by_id(market_id)
             if not market:
                 raise ValueError(f"Market {market_id} not found")
             
-            # Create text representation
-            text_parts = [f"Question: {market.question}"]
-            if market.description:
-                text_parts.append(f"Description: {market.description}")
-            if market.outcomes:
-                text_parts.append(f"Outcomes: {', '.join(market.outcomes)}")
+            # Generate topics using AI
+            logger.info(f"Generating topics for market {market_id}...")
+            topics = await self.openai_helper.generate_market_topics(
+                question=market.question,
+                description=market.description,
+                outcomes=market.outcomes if market.outcomes else None
+            )
             
-            text = " | ".join(text_parts)
+            if not topics:
+                logger.warning(f"No topics generated for market {market_id}, using fallback")
+                # Fallback: use original text if topic generation fails
+                text_parts = [f"Question: {market.question}"]
+                if market.description:
+                    text_parts.append(f"Description: {market.description}")
+                text = " | ".join(text_parts)
+            else:
+                # Create text representation from topics
+                # Format: "Topic1: Description1 | Topic2: Description2 | ..."
+                topic_texts = [f"{topic.name}: {topic.description}" for topic in topics]
+                text = " | ".join(topic_texts)
+                logger.info(f"Generated {len(topics)} topics for market {market_id}")
             
-            # Create embedding
+            # Create embedding from topics text
             embedding = await self.openai_helper.create_text_embedding(text)
             
-            # Store in database
-            return await self.db_service.store_embedding(market_id, embedding)
+            # Convert topics to dict format for storage
+            topics_dict = [{"name": topic.name, "description": topic.description} for topic in topics] if topics else None
+            
+            # Store in database with topics
+            return await self.db_service.store_embedding(market_id, embedding, topics=topics_dict)
             
         except Exception as e:
             logger.error(f"Error creating embedding for market {market_id}: {e}")
@@ -81,28 +97,60 @@ class VectorService:
                 if not markets:
                     continue
                 
-                # Create text representations
+                # Generate topics and create text representations for each market
                 texts = []
                 market_map = {}
+                topics_map = {}
+                
                 for market in markets:
-                    text_parts = [f"Question: {market.question}"]
-                    if market.description:
-                        text_parts.append(f"Description: {market.description}")
-                    if market.outcomes:
-                        text_parts.append(f"Outcomes: {', '.join(market.outcomes)}")
-                    
-                    text = " | ".join(text_parts)
-                    texts.append(text)
-                    market_map[len(texts) - 1] = market.id
+                    try:
+                        # Generate topics using AI
+                        topics = await self.openai_helper.generate_market_topics(
+                            question=market.question,
+                            description=market.description,
+                            outcomes=market.outcomes if market.outcomes else None
+                        )
+                        
+                        if not topics:
+                            logger.warning(f"No topics generated for market {market.id}, using fallback")
+                            # Fallback: use original text
+                            text_parts = [f"Question: {market.question}"]
+                            if market.description:
+                                text_parts.append(f"Description: {market.description}")
+                            if market.outcomes:
+                                text_parts.append(f"Outcomes: {', '.join(market.outcomes)}")
+                            text = " | ".join(text_parts)
+                            topics_map[market.id] = None
+                        else:
+                            # Create text from topics
+                            topic_texts = [f"{topic.name}: {topic.description}" for topic in topics]
+                            text = " | ".join(topic_texts)
+                            topics_map[market.id] = [{"name": topic.name, "description": topic.description} for topic in topics]
+                        
+                        texts.append(text)
+                        market_map[len(texts) - 1] = market.id
+                    except Exception as e:
+                        logger.error(f"Error generating topics for market {market.id}: {e}")
+                        # Fallback to original text
+                        text_parts = [f"Question: {market.question}"]
+                        if market.description:
+                            text_parts.append(f"Description: {market.description}")
+                        if market.outcomes:
+                            text_parts.append(f"Outcomes: {', '.join(market.outcomes)}")
+                        text = " | ".join(text_parts)
+                        texts.append(text)
+                        market_map[len(texts) - 1] = market.id
+                        topics_map[market.id] = None
                 
                 # Batch create embeddings via OpenAI
                 embeddings = await self.openai_helper.create_text_embeddings(texts)
                 
-                # Store all embeddings
+                # Store all embeddings with topics
                 for idx, embedding in enumerate(embeddings):
                     market_id = market_map[idx]
                     try:
-                        await self.db_service.store_embedding(market_id, embedding)
+                        topics = topics_map.get(market_id)
+                        await self.db_service.store_embedding(market_id, embedding, topics=topics)
                         created += 1
                     except Exception as e:
                         failed += 1
@@ -186,8 +234,11 @@ class VectorService:
     ) -> List[Tuple[int, float]]:
         """Find markets similar to a text query."""
         try:
-            # Create embedding for query
-            query_embedding = await self.openai_helper.create_text_embedding(query_text)
+            # Preprocess query (cleaning, lowercasing, removing punctuation)
+            cleaned_query = self.openai_helper.preprocess_query(query_text)
+            
+            # Create embedding for preprocessed query
+            query_embedding = await self.openai_helper.create_text_embedding(cleaned_query)
             
             # Find similar
             return await self.find_similar_markets(query_embedding, limit=limit)
@@ -296,8 +347,11 @@ class VectorService:
             List of (market_id, similarity_score) tuples
         """
         try:
-            # Create embedding for query
-            query_embedding = await self.openai_helper.create_text_embedding(query_text)
+            # Preprocess query (cleaning, lowercasing, removing punctuation)
+            cleaned_query = self.openai_helper.preprocess_query(query_text)
+            
+            # Create embedding for preprocessed query
+            query_embedding = await self.openai_helper.create_text_embedding(cleaned_query)
             
             # Find all in proximity
             return await self.find_markets_in_proximity(query_embedding, threshold=threshold)

@@ -7,7 +7,11 @@ from pydantic import BaseModel
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 from app.core.config import settings
-from app.schemas.vector_schema import Dataset, Vector
+from app.schemas.vector_schema import Dataset, Vector, MarketTopics, Topic
+import re
+import logging
+
+logger = logging.getLogger(__name__)
 
 T = TypeVar('T', bound=BaseModel)
 
@@ -260,6 +264,97 @@ class OpenAIHelper:
         
         response = await self.chat_model.ainvoke(messages)
         return response.content
+    
+    # ==================== TOPIC GENERATION ====================
+    
+    async def generate_market_topics(
+        self,
+        question: str,
+        description: Optional[str] = None,
+        outcomes: Optional[List[str]] = None
+    ) -> List[Topic]:
+        """
+        Generate ~15 logical topics for a market using AI.
+        Topics capture the logical/conceptual meaning rather than grammatical structure.
+        
+        Args:
+            question: Market question
+            description: Optional market description
+            outcomes: Optional list of outcomes
+            
+        Returns:
+            List of Topic objects with name and description
+        """
+        # Build market context
+        market_context = f"Market Question: {question}\n"
+        if description:
+            market_context += f"Description: {description}\n"
+        if outcomes:
+            market_context += f"Outcomes: {', '.join(outcomes)}\n"
+        
+        system_message = """You are an expert at analyzing prediction markets and extracting logical, conceptual topics.
+
+Your task is to identify approximately 15 key topics that capture the LOGICAL and CONCEPTUAL meaning of the market, 
+not just grammatical or surface-level features.
+
+Each topic should be:
+- A specific, well-defined concept (e.g., "embedded banking APIs for banks", "fintech regulation in Europe", "startup product-market fit for B2B SaaS")
+- Described clearly to explain what the concept means
+- Focused on the underlying themes, domains, industries, technologies, or concepts relevant to the market
+- Logically related to the market's subject matter
+
+Examples of good topics:
+- "embedded banking APIs for banks" - description: "APIs that allow banks to integrate banking services into third-party applications"
+- "fintech regulation in Europe" - description: "Regulatory frameworks governing financial technology companies in European markets"
+- "startup product-market fit for B2B SaaS" - description: "The alignment between a B2B SaaS product and its target market's needs"
+
+Generate topics that would help someone understand what this market is really about at a conceptual level."""
+
+        prompt = f"""Analyze the following prediction market and generate approximately 15 logical topics that capture its conceptual meaning:
+
+{market_context}
+
+Generate topics that represent the key concepts, domains, industries, technologies, or themes that this market relates to."""
+
+        try:
+            result = await self.get_structured_output(
+                prompt=prompt,
+                response_model=MarketTopics,
+                system_message=system_message
+            )
+            return result.topics
+        except Exception as e:
+            logger.error(f"Error generating topics: {e}")
+            # Fallback: return empty list or basic topics
+            return []
+    
+    # ==================== QUERY PREPROCESSING ====================
+    
+    def preprocess_query(self, query: str) -> str:
+        """
+        Preprocess a user query before creating embeddings.
+        Cleans, lowercases, and removes extraneous punctuation.
+        
+        Args:
+            query: Raw user query
+            
+        Returns:
+            Cleaned and preprocessed query string
+        """
+        # Lowercase
+        query = query.lower()
+        
+        # Remove extraneous punctuation (keep basic sentence punctuation)
+        # Keep: letters, numbers, spaces, basic punctuation (. , ? !)
+        query = re.sub(r'[^\w\s.,?!-]', ' ', query)
+        
+        # Remove multiple spaces
+        query = re.sub(r'\s+', ' ', query)
+        
+        # Strip leading/trailing whitespace
+        query = query.strip()
+        
+        return query
     
     # ==================== UTILITY METHODS ====================
     

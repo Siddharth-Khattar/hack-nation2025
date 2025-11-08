@@ -331,7 +331,7 @@ class DatabaseService:
     
     # ==================== VECTOR EMBEDDING OPERATIONS ====================
     
-    async def store_embedding(self, market_id: int, embedding: List[float]) -> VectorEmbedding:
+    async def store_embedding(self, market_id: int, embedding: List[float], topics: Optional[List[dict]] = None) -> VectorEmbedding:
         """Store a vector embedding for a market."""
         try:
             data = {
@@ -340,6 +340,10 @@ class DatabaseService:
                 'created_at': datetime.utcnow().isoformat(),
                 'updated_at': datetime.utcnow().isoformat()
             }
+            
+            # Add topics if provided
+            if topics is not None:
+                data['topics'] = topics
             
             # Upsert: update if exists, insert if not
             response = self.client.table('vector_embeddings').upsert(

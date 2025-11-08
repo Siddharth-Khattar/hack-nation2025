@@ -38,7 +38,7 @@ async def create_all_embeddings():
         
         # Get all markets
         print("📊 Fetching markets from database...")
-        markets = await db.get_markets(limit=10000)
+        markets = await db.get_markets(limit=30000)
         print(f"✓ Found {len(markets)} markets")
         print()
         

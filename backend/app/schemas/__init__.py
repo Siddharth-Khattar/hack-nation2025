@@ -31,6 +31,14 @@ from .vector_schema import (
     SimilaritySearchResponse,
 )
 
+from .relation_schema import (
+    RelatedMarket,
+    RelationSearchResponse,
+    MarketRelation,
+    MarketRelationCreate,
+    MarketRelationBatchCreate,
+)
+
 __all__ = [
     # Market schemas
     "Market",
@@ -55,4 +63,10 @@ __all__ = [
     "Dataset",
     "SimilarityResult",
     "SimilaritySearchResponse",
+    # Relation schemas
+    "RelatedMarket",
+    "RelationSearchResponse",
+    "MarketRelation",
+    "MarketRelationCreate",
+    "MarketRelationBatchCreate",
 ]
