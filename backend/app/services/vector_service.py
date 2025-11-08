@@ -1,4 +1,4 @@
-from app.schemas.vectors import Vector, Dataset
+from app.schemas.vector_schema import Vector, Dataset
 from app.core.config import settings
 # from openai import OpenAI
 
@@ -9,6 +9,11 @@ class VectorService:
     @staticmethod
     def retrieve_vector(id: int) -> Vector:
         """Retrieve a vector by ID"""
+        return None
+
+    @staticmethod
+    def retrieve_dataset(id: int) -> Dataset:
+        """Retrieve a dataset by ID"""
         return None
 
     @staticmethod

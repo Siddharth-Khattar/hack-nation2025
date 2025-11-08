@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import List
-from app.schemas.vector_schema import Vector, VectorResponse, DatasetResponse
+from app.schemas.schemas import Vector, VectorResponse, DatasetResponse
 from app.services.vector_service import VectorService
 
 router = APIRouter()
