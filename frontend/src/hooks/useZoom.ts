@@ -32,6 +32,14 @@ export interface ZoomController {
    * Gets the current zoom transform.
    */
   getCurrentTransform: () => ZoomTransform;
+
+  /**
+   * Applies a specific zoom transform with animation.
+   * Useful for zoom-to-cluster or zoom-to-fit operations.
+   * @param transform - The target zoom transform
+   * @param duration - Animation duration in milliseconds (default: 500)
+   */
+  applyTransform: (transform: ZoomTransform, duration?: number) => void;
 }
 
 /**
@@ -164,6 +172,21 @@ export function createZoomBehavior(
 
     getCurrentTransform: () => {
       return currentTransform;
+    },
+
+    applyTransform: (transform: ZoomTransform, duration = 500) => {
+      console.log("[DEBUG useZoom] applyTransform called:", {
+        scale: transform.k,
+        translate: [transform.x, transform.y],
+        duration,
+      });
+
+      // Apply the transform with custom duration
+      const svg = select(svgElement as SVGSVGElement);
+      svg
+        .transition()
+        .duration(duration)
+        .call(zoomBehavior.transform, transform);
     },
   };
 
