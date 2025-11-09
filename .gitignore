@@ -37,3 +37,5 @@ ENV/
 frontend/CLAUDE.md
 frontend/CONTEXT.md
 frontend/PLAN.md
+frontend/API-CONNECTION.md
+frontend/api-spec.json
