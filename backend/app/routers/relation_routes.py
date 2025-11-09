@@ -23,13 +23,14 @@ async def get_related_markets_enriched(
     limit: int = Query(10, ge=1, le=1000, description="Maximum number of related markets"),
     min_similarity: float = Query(0.7, ge=0.0, le=1.0, description="Minimum similarity threshold"),
     min_volume: Optional[float] = Query(None, ge=0.0, description="Minimum market volume filter"),
-    ai_analysis: bool = Query(False, description="Include AI-generated correlation analysis (slower)")
+    ai_analysis: bool = Query(False, description="Include AI-generated correlation analysis (slower)"),
+    ai_model: str = Query("gemini-flash", description="AI model: 'gemini-flash' (fast) or 'gemini-pro' (quality)")
 ):
     """
     Get related markets with full market details (enriched data).
     Returns markets with similarity >= min_similarity threshold, including full market objects.
     
-    Example: `/relations/123/enriched?limit=100&min_similarity=0.7&min_volume=10000&ai_analysis=true`
+    Example: `/relations/123/enriched?limit=100&min_similarity=0.7&min_volume=10000&ai_analysis=true&ai_model=gemini-pro`
     
     Args:
         market_id: Source market ID
@@ -37,12 +38,15 @@ async def get_related_markets_enriched(
         min_similarity: Minimum similarity score (default: 0.7)
         min_volume: Minimum market volume (optional, filters out low-volume markets)
         ai_analysis: Include AI correlation analysis (default: False for speed)
+        ai_model: AI model to use - 'gemini-flash' (faster) or 'gemini-pro' (higher quality)
     
     Returns:
-        Enriched response with full market details for each related market
+        Enriched response with full market details, AI correlation scores, and arbitrage analysis
     
     Note:
         AI analysis adds 1-3 seconds per market. Use sparingly for large result sets.
+        Includes arbitrage scores (0.0-1.0 scale) and risk levels when AI analysis is enabled.
+        Arbitrage scores focus on price differentials - same prices = low score.
     """
     try:
         service = get_relation_service()
@@ -54,7 +58,8 @@ async def get_related_markets_enriched(
             min_similarity=min_similarity,
             min_volume=min_volume,
             include_source=True,
-            include_ai_analysis=ai_analysis
+            include_ai_analysis=ai_analysis,
+            ai_model=ai_model
         )
         
         return EnrichedRelationResponse(
@@ -68,9 +73,12 @@ async def get_related_markets_enriched(
                     pressure=press,
                     market=market,
                     ai_correlation_score=ai_score,
-                    ai_explanation=ai_explanation
+                    ai_explanation=ai_explanation,
+                    investment_score=inv_score,
+                    investment_rationale=inv_rationale,
+                    risk_level=risk
                 )
-                for mid, sim, corr, press, market, ai_score, ai_explanation in result["related_markets"]
+                for mid, sim, corr, press, market, ai_score, ai_explanation, inv_score, inv_rationale, risk in result["related_markets"]
             ],
             count=len(result["related_markets"])
         )
@@ -86,13 +94,14 @@ async def get_related_markets(
     limit: int = Query(10, ge=1, le=1000, description="Maximum number of related markets"),
     min_similarity: float = Query(0.7, ge=0.0, le=1.0, description="Minimum similarity threshold"),
     min_volume: Optional[float] = Query(None, ge=0.0, description="Minimum market volume filter"),
-    ai_analysis: bool = Query(False, description="Include AI-generated correlation analysis (slower)")
+    ai_analysis: bool = Query(False, description="Include AI-generated correlation analysis (slower)"),
+    ai_model: str = Query("gemini-flash", description="AI model: 'gemini-flash' (fast) or 'gemini-pro' (quality)")
 ):
     """
     Get related markets from stored relations in database (lightweight version without full market objects).
     Returns markets with similarity >= min_similarity threshold.
     
-    Example: `/relations/123?limit=100&min_similarity=0.7&min_volume=10000&ai_analysis=true`
+    Example: `/relations/123?limit=100&min_similarity=0.7&min_volume=10000&ai_analysis=true&ai_model=gemini-pro`
     
     Args:
         market_id: Source market ID
@@ -100,10 +109,12 @@ async def get_related_markets(
         min_similarity: Minimum similarity score (default: 0.7)
         min_volume: Minimum market volume (optional, filters out low-volume markets)
         ai_analysis: Include AI correlation analysis (default: False for speed)
+        ai_model: AI model to use - 'gemini-flash' (faster) or 'gemini-pro' (higher quality)
     
     Note:
         For full market details, use `/relations/{market_id}/enriched` instead.
-        AI analysis adds 1-3 seconds per market when enabled.
+        AI analysis adds 1-3 seconds per market and includes arbitrage scoring (0.0-1.0) when enabled.
+        Arbitrage scores focus on price differentials - same prices = low score.
     """
     try:
         service = get_relation_service()
@@ -112,7 +123,8 @@ async def get_related_markets(
             limit=limit,
             min_similarity=min_similarity,
             min_volume=min_volume,
-            include_ai_analysis=ai_analysis
+            include_ai_analysis=ai_analysis,
+            ai_model=ai_model
         )
         
         return RelationSearchResponse(
@@ -124,9 +136,12 @@ async def get_related_markets(
                     correlation=corr, 
                     pressure=press,
                     ai_correlation_score=ai_score,
-                    ai_explanation=ai_explanation
+                    ai_explanation=ai_explanation,
+                    investment_score=inv_score,
+                    investment_rationale=inv_rationale,
+                    risk_level=risk
                 )
-                for mid, sim, corr, press, ai_score, ai_explanation in results
+                for mid, sim, corr, press, ai_score, ai_explanation, inv_score, inv_rationale, risk in results
             ],
             count=len(results)
         )

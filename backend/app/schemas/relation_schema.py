@@ -11,6 +11,9 @@ class RelatedMarket(BaseModel):
     pressure: float = Field(0.0, description="Pressure score")
     ai_correlation_score: Optional[float] = Field(None, description="AI-generated correlation score (0.0-1.0)")
     ai_explanation: Optional[str] = Field(None, description="AI-generated explanation of relationship")
+    investment_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Arbitrage opportunity score (0.0-1.0). Higher = better price differential")
+    investment_rationale: Optional[str] = Field(None, description="Arbitrage opportunity explanation focusing on price differentials")
+    risk_level: Optional[str] = Field(None, description="Risk level: low, medium, high")
 
 class RelationSearchResponse(BaseModel):
     """Response for relation searches"""
@@ -53,6 +56,9 @@ class EnrichedRelatedMarket(BaseModel):
     market: Market = Field(..., description="Full market details")
     ai_correlation_score: Optional[float] = Field(None, description="AI-generated correlation score (0.0-1.0)")
     ai_explanation: Optional[str] = Field(None, description="AI-generated explanation of relationship")
+    investment_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Arbitrage opportunity score (0.0-1.0). Higher = better price differential")
+    investment_rationale: Optional[str] = Field(None, description="Arbitrage opportunity explanation focusing on price differentials")
+    risk_level: Optional[str] = Field(None, description="Risk level: low, medium, high")
 
 class EnrichedRelationResponse(BaseModel):
     """Response for enriched relation searches with full market data"""
