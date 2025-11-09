@@ -7,6 +7,67 @@ import { useState } from "react";
 import type { GraphNode } from "@/types/graph";
 import { getNodeColor } from "@/lib/d3-helpers";
 import { formatTimestamp } from "@/lib/utils";
+import { usePanelState } from "@/hooks/usePanelState";
+
+/**
+ * TruncatedText component displays text with truncation and expand/collapse functionality.
+ * Shows first maxLength characters with a "more" button if text is longer.
+ */
+function TruncatedText({
+  text,
+  maxLength = 500,
+  style,
+}: {
+  text: string;
+  maxLength?: number;
+  style?: React.CSSProperties;
+}) {
+  const [isExpanded, setIsExpanded] = useState(false);
+  const shouldTruncate = text.length > maxLength;
+  const displayText = isExpanded || !shouldTruncate ? text : text.slice(0, maxLength);
+
+  if (!shouldTruncate) {
+    return <div style={style}>{text}</div>;
+  }
+
+  return (
+    <div style={style}>
+      <span>
+        {displayText}
+        {!isExpanded && shouldTruncate && "..."}
+      </span>
+      {" "}
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        style={{
+          display: "inline",
+          padding: 0,
+          margin: 0,
+          marginLeft: "4px",
+          backgroundColor: "transparent",
+          border: "none",
+          color: "#64748b",
+          cursor: "pointer",
+          fontSize: "inherit",
+          fontWeight: "400",
+          textDecoration: "underline",
+          textDecorationColor: "rgba(100, 116, 139, 0.4)",
+          transition: "all 150ms ease-in-out",
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = "#94a3b8";
+          e.currentTarget.style.textDecorationColor = "rgba(148, 163, 184, 0.6)";
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = "#64748b";
+          e.currentTarget.style.textDecorationColor = "rgba(100, 116, 139, 0.4)";
+        }}
+      >
+        {isExpanded ? "show less" : "show more"}
+      </button>
+    </div>
+  );
+}
 
 interface NodeInfoPanelProps {
   /** All nodes in the graph for list view */
@@ -17,6 +78,9 @@ interface NodeInfoPanelProps {
 
   /** Callback when user clicks a node in list view */
   onNodeSelect: (nodeId: string) => void;
+
+  /** Callback to open the market panel for a specific market_id */
+  onOpenSidebar?: (marketId: number) => void;
 }
 
 /**
@@ -34,8 +98,9 @@ export function NodeInfoPanel({
   nodes,
   selectedNode,
   onNodeSelect,
+  onOpenSidebar,
 }: NodeInfoPanelProps) {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const { isCollapsed, toggleCollapse } = usePanelState("node-info", true);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   return (
@@ -89,7 +154,7 @@ export function NodeInfoPanel({
 
           {/* Collapse toggle button */}
           <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={toggleCollapse}
             aria-label={isCollapsed ? "Expand panel" : "Collapse panel"}
             title={isCollapsed ? "Expand panel" : "Collapse panel"}
             style={{
@@ -120,7 +185,7 @@ export function NodeInfoPanel({
         {!isCollapsed && (
           <>
             {selectedNode ? (
-              <NodeDetailView node={selectedNode} />
+              <NodeDetailView node={selectedNode} onOpenSidebar={onOpenSidebar} />
             ) : (
               <NodeListView
                 nodes={nodes}
@@ -138,25 +203,101 @@ export function NodeInfoPanel({
 
 /**
  * NodeDetailView displays detailed information about a selected node.
- * Shows name, group, volatility with gradient bar, and last update timestamp.
+ * Shows name, description, volume, outcomes, tags, volatility, and last update.
  */
-function NodeDetailView({ node }: { node: GraphNode }) {
+function NodeDetailView({
+  node,
+  onOpenSidebar,
+}: {
+  node: GraphNode;
+  onOpenSidebar?: (marketId: number) => void;
+}) {
+  const handleOpenSidebar = () => {
+    if (node.marketId && onOpenSidebar) {
+      onOpenSidebar(node.marketId);
+    }
+  };
+
   return (
     <div
       style={{
         display: "flex",
         flexDirection: "column",
         gap: "16px",
+        maxHeight: "calc(100vh - 180px)",
+        overflowY: "auto",
+        paddingRight: "4px",
       }}
     >
-      {/* Name field */}
-      <FieldDisplay label="Name" value={node.name} />
+      {/* Open Market Panel Button - only show if marketId exists */}
+      {node.marketId && onOpenSidebar && (
+        <button
+          onClick={handleOpenSidebar}
+          style={{
+            backgroundColor: "rgba(59, 130, 246, 0.15)",
+            border: "1px solid rgba(59, 130, 246, 0.3)",
+            borderRadius: "8px",
+            color: "#60a5fa",
+            cursor: "pointer",
+            padding: "10px 16px",
+            fontSize: "14px",
+            fontWeight: "500",
+            transition: "all 150ms ease-in-out",
+            width: "100%",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.25)";
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.5)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.15)";
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.3)";
+          }}
+        >
+          Advanced Generative AI Analysis →
+        </button>
+      )}
+      {/* Name field - show full name in detail view */}
+      <FieldDisplay label="Name" value={node.fullName || node.name} />
 
-      {/* ID field */}
-      <FieldDisplay label="ID" value={node.id} />
+      {/* Description field - only show if available */}
+      {node.description && (
+        <div>
+          <FieldLabel>Description</FieldLabel>
+          <TruncatedText
+            text={node.description}
+            maxLength={200}
+            style={{
+              color: "#f1f5f9",
+              fontSize: "14px",
+              wordBreak: "break-word",
+              marginTop: "4px",
+            }}
+          />
+        </div>
+      )}
 
-      {/* Group field */}
-      <FieldDisplay label="Group" value={node.group} />
+      {/* Volume field */}
+      <div>
+        <FieldLabel>Volume</FieldLabel>
+        <VolumeDisplay volume={node.volume} />
+      </div>
+
+      {/* Outcomes comparison */}
+      {node.outcomes && node.outcomes.length > 0 && (
+        <div>
+          <FieldLabel>Outcomes</FieldLabel>
+          <OutcomesComparison outcomes={node.outcomes} prices={node.outcomePrices} />
+        </div>
+      )}
+
+      {/* Tags field - only show if tags exist */}
+      {node.tags && node.tags.length > 0 && (
+        <div>
+          <FieldLabel>Tags</FieldLabel>
+          <TagsDisplay tags={node.tags} />
+        </div>
+      )}
 
       {/* Volatility field with gradient bar */}
       <div>
@@ -169,6 +310,9 @@ function NodeDetailView({ node }: { node: GraphNode }) {
         label="Last Update"
         value={formatTimestamp(node.lastUpdate)}
       />
+
+      {/* ID field at bottom for reference */}
+      <FieldDisplay label="ID" value={node.id} />
     </div>
   );
 }
@@ -274,7 +418,7 @@ function NodeListView({
                   textOverflow: "ellipsis",
                 }}
               >
-                {node.name}
+                {node.shortened_name || node.name}
               </div>
             </div>
 
@@ -420,6 +564,160 @@ function VolatilityBar({ volatility }: { volatility: number }) {
       >
         {(volatility * 100).toFixed(0)}%
       </span>
+    </div>
+  );
+}
+
+/**
+ * TagsDisplay renders tags as accessible pill-shaped badges.
+ * Follows modern design principles with proper spacing, colors, and accessibility.
+ */
+function TagsDisplay({ tags }: { tags: string[] }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "6px",
+        marginTop: "4px",
+      }}
+      role="list"
+      aria-label="Tags"
+    >
+      {tags.map((tag, index) => (
+        <span
+          key={`${tag}-${index}`}
+          role="listitem"
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            padding: "4px 12px",
+            backgroundColor: "rgba(59, 130, 246, 0.15)",
+            border: "1px solid rgba(59, 130, 246, 0.3)",
+            borderRadius: "12px",
+            color: "#60a5fa",
+            fontSize: "12px",
+            fontWeight: "500",
+            letterSpacing: "0.025em",
+            transition: "all 150ms ease-in-out",
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.25)";
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.5)";
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.backgroundColor = "rgba(59, 130, 246, 0.15)";
+            e.currentTarget.style.borderColor = "rgba(59, 130, 246, 0.3)";
+          }}
+        >
+          {tag}
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/**
+ * VolumeDisplay renders the market volume with proper formatting.
+ * Displays large numbers with K/M/B abbreviations for readability.
+ */
+function VolumeDisplay({ volume }: { volume: number }) {
+  const formatVolume = (val: number): string => {
+    if (val >= 1_000_000_000) {
+      return `$${(val / 1_000_000_000).toFixed(2)}B`;
+    } else if (val >= 1_000_000) {
+      return `$${(val / 1_000_000).toFixed(2)}M`;
+    } else if (val >= 1_000) {
+      return `$${(val / 1_000).toFixed(2)}K`;
+    } else {
+      return `$${val.toFixed(2)}`;
+    }
+  };
+
+  return (
+    <div
+      style={{
+        color: "#f1f5f9",
+        fontSize: "16px",
+        fontWeight: "600",
+        marginTop: "4px",
+      }}
+    >
+      {formatVolume(volume)}
+    </div>
+  );
+}
+
+/**
+ * OutcomesComparison renders outcomes with their prices in a side-by-side comparison.
+ * Uses gentle red/green colors to indicate different outcomes.
+ */
+function OutcomesComparison({ outcomes, prices }: { outcomes: string[]; prices: string[] }) {
+  return (
+    <div
+      style={{
+        display: "flex",
+        flexDirection: "column",
+        gap: "8px",
+        marginTop: "4px",
+      }}
+      role="list"
+      aria-label="Market outcomes"
+    >
+      {outcomes.map((outcome, index) => {
+        const price = prices[index] || "0";
+        const priceNum = parseFloat(price);
+
+        // Determine color based on price (higher = more likely = green, lower = less likely = red)
+        const isHighProbability = priceNum >= 0.5;
+        const backgroundColor = isHighProbability
+          ? "rgba(34, 197, 94, 0.1)" // Gentle green
+          : "rgba(239, 68, 68, 0.1)"; // Gentle red
+        const borderColor = isHighProbability
+          ? "rgba(34, 197, 94, 0.3)"
+          : "rgba(239, 68, 68, 0.3)";
+        const textColor = isHighProbability
+          ? "#4ade80" // Green-400
+          : "#f87171"; // Red-400
+
+        return (
+          <div
+            key={`${outcome}-${index}`}
+            role="listitem"
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              padding: "10px 12px",
+              backgroundColor,
+              border: `1px solid ${borderColor}`,
+              borderRadius: "8px",
+              transition: "all 150ms ease-in-out",
+            }}
+          >
+            <span
+              style={{
+                color: "#f1f5f9",
+                fontSize: "14px",
+                fontWeight: "500",
+              }}
+            >
+              {outcome}
+            </span>
+            <span
+              style={{
+                color: textColor,
+                fontSize: "16px",
+                fontWeight: "600",
+                minWidth: "70px",
+                textAlign: "right",
+              }}
+            >
+              ${priceNum.toFixed(3)}
+            </span>
+          </div>
+        );
+      })}
     </div>
   );
 }

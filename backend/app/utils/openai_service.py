@@ -366,6 +366,72 @@ Generate topics that represent the key concepts, domains, industries, technologi
         
         return query
     
+    # ==================== NAME SHORTENING ====================
+    
+    async def shorten_market_name(self, market_question: str) -> str:
+        """
+        Shorten a market question/name to exactly 3 words using AI.
+        
+        Args:
+            market_question: The full market question to shorten
+            
+        Returns:
+            Shortened name with exactly 3 words
+            
+        Example:
+            >>> helper = OpenAIHelper()
+            >>> short = await helper.shorten_market_name(
+            ...     "Will Bitcoin reach $100k by 2025?"
+            ... )
+            >>> short
+            "Bitcoin Reaches 100k"
+        """
+        system_message = """You are a name shortening assistant. Your task is to shorten market questions to exactly 3 words that capture the essence of the question.
+
+Rules:
+- Output EXACTLY 3 words (no more, no less)
+- Use the most important keywords from the question
+- Keep proper nouns (names, places, companies) when relevant
+- Make it concise but meaningful
+- Do not include question words like "Will", "Does", "Is" unless essential
+- Return ONLY the 3 words, nothing else
+
+Examples:
+- "Will Bitcoin reach $100k by 2025?" -> "Bitcoin Reaches 100k"
+- "Donald Trump wins 2024 election?" -> "Trump Wins Election"
+- "Tesla stock price above $300?" -> "Tesla Stock Price"
+- "Will there be a recession in 2024?" -> "2024 Recession Prediction"
+"""
+        
+        prompt = f"Shorten this market question to exactly 3 words: {market_question}"
+        
+        try:
+            response = await self.get_chat_response(
+                prompt=prompt,
+                system_message=system_message
+            )
+            
+            # Clean up the response - extract just the words
+            words = response.strip().split()
+            # Take first 3 words if more than 3, pad if less
+            if len(words) >= 3:
+                shortened = " ".join(words[:3])
+            else:
+                # If AI didn't follow instructions, try to extract key words from original
+                important_words = [w for w in market_question.split() if w.lower() not in ['will', 'the', 'a', 'an', 'be', 'is', 'are', 'was', 'were', 'by', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'from']]
+                shortened = " ".join(important_words[:3]) if len(important_words) >= 3 else market_question[:30]
+            
+            return shortened.strip()
+            
+        except Exception as e:
+            logger.error(f"Error shortening market name: {e}")
+            # Fallback: extract first 3 meaningful words
+            words = market_question.split()
+            important_words = [w for w in words if w.lower() not in ['will', 'the', 'a', 'an', 'be', 'is', 'are', 'was', 'were', 'by', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'from']]
+            if len(important_words) >= 3:
+                return " ".join(important_words[:3])
+            return " ".join(words[:3]) if len(words) >= 3 else market_question[:30]
+    
     # ==================== UTILITY METHODS ====================
     
     def get_embedding_dimension(self) -> int:
@@ -426,71 +492,6 @@ Generate topics that represent the key concepts, domains, industries, technologi
         # Sort by similarity and return top_k
         similarities.sort(key=lambda x: x[1], reverse=True)
         return similarities[:top_k]
-    
-    # ==================== MARKET CORRELATION ANALYSIS ====================
-    
-    async def analyze_market_correlation(
-        self,
-        market1_question: str,
-        market1_description: Optional[str],
-        market2_question: str,
-        market2_description: Optional[str]
-    ) -> 'MarketCorrelationAnalysis':
-        """
-        Use AI to analyze if two markets influence each other and generate a correlation score.
-        
-        Args:
-            market1_question: Question for the first market
-            market1_description: Description for the first market (optional)
-            market2_question: Question for the second market
-            market2_description: Description for the second market (optional)
-            
-        Returns:
-            MarketCorrelationAnalysis with AI-generated correlation score and explanation
-        """
-        from app.schemas.vector_schema import MarketCorrelationAnalysis
-        
-        # Build context for both markets
-        market1_context = f"Market 1: {market1_question}"
-        if market1_description:
-            market1_context += f"\nDescription: {market1_description}"
-        
-        market2_context = f"Market 2: {market2_question}"
-        if market2_description:
-            market2_context += f"\nDescription: {market2_description}"
-        
-        system_message = """You are an expert analyst evaluating prediction markets and causal relationships.
-Your task is to answer: How likely is it that the outcome of Event 2 will directly cause or lead to the outcome of Event 1? Rate the likelihood using a correlation score (0.0 to 1.0), and provide a brief explanation (2-3 sentences maximum). Focus on causality or directional influence.
-
-Scoring guide:
-- 0.0-0.3: Event 2 outcome has little or no effect on Event 1 outcome.
-- 0.4-0.6: Event 2 might moderately or indirectly increase the likelihood of Event 1.
-- 0.7-0.9: Event 2 outcome is likely to directly trigger Event 1 (strong causal link).
-- 1.0: Event 2 outcome guarantees Event 1, or both describe the same event.
-
-Examples:
-- "Will the Pope die this year?" (Event 1) ← "Who will be the next Pope?" (Event 2): No causal link; new Pope doesn't cause current Pope's death (low score).
-- "Will Israel strike Lebanon on Nov 5?" (Event 1) ← "Will there be a ground offensive in Lebanon by Dec 31?" (Event 2): Offensive doesn't guarantee earlier strike (low score).
-- "Will Bitcoin hit $100k?" (Event 1) ← "Will Bitcoin ETFs be approved?" (Event 2): ETF approval strongly increases chances of price surge (high score).
-
-Be concise and prioritize causal direction (Event 2 leading to Event 1)."""
-  
-        prompt = f"""{market1_context}
-
-{market2_context}
-
-Assess how likely it is that the outcome of Event 2 (above) will directly cause or lead to the outcome of Event 1. Focus on directional/causal influence: does Event 2 happening substantially increase the odds that Event 1 also happens? If not, explain why not.
-
-Provide your correlation score (0.0-1.0) and a brief explanation."""
-
-        # Get structured output
-        analysis = await self.get_structured_output(
-            prompt=prompt,
-            response_model=MarketCorrelationAnalysis,
-            system_message=system_message
-        )
-        
-        return analysis
     
     async def similarity_search_datasets(
         self,

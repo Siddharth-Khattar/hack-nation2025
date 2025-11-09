@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { select } from "d3-selection";
 import type { Simulation } from "d3-force";
 import { type ZoomTransform, zoomIdentity } from "d3-zoom";
@@ -13,12 +13,14 @@ import { createDragBehaviorWithClick } from "@/hooks/useDrag";
 import { createZoomBehavior, type ZoomController } from "@/hooks/useZoom";
 import { useCluster } from "@/hooks/useCluster";
 import {
-  getNodeColor,
+  getNodeColorWithThresholds,
   getConnectionWidth,
+  getEnhancedConnectionWidth,
   getConnectionColor,
   getNodeRadius,
-  shouldNodePulse,
+  shouldNodePulseWithThresholds,
 } from "@/lib/d3-helpers";
+import { calculateVolatilityThresholds } from "@/utils/percentile";
 
 interface ForceGraphProps {
   data: GraphData;
@@ -85,7 +87,15 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
     getConnectionOpacity,
     getNodeScale,
     adjacencyMap,
+    getConnectionCount,
+    connectionStats,
   } = useCluster(mutableData.nodes, mutableData.connections);
+
+  // Calculate volatility thresholds from current nodes for dynamic color scaling
+  const volatilityThresholds = useMemo(() => {
+    const volatilities = mutableData.nodes.map(node => node.volatility);
+    return calculateVolatilityThresholds(volatilities);
+  }, [mutableData.nodes]);
 
   // Callback to force re-render when simulation updates node positions
   const handleTick = useCallback(() => {
@@ -275,6 +285,10 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
     height: dimensions.height,
     onTick: handleTick,
     onSimulationCreated: handleSimulationCreated,
+    getNodeRadiusCallback: useCallback((node: GraphNode) => {
+      const connectionCount = getConnectionCount(node.id);
+      return getNodeRadius(connectionCount, connectionStats.p95);
+    }, [getConnectionCount, connectionStats]),
   });
 
   // Apply drag behavior to nodes AFTER they are rendered in the DOM
@@ -404,7 +418,10 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
               return null;
             }
 
-            const strokeWidth = getConnectionWidth(connection.correlation);
+            // Use correlation-based width for global view, enhanced width for cluster view
+            const strokeWidth = clusterState.selectedNodeId !== null
+              ? getEnhancedConnectionWidth(connection.correlation, connection.pressure)
+              : getConnectionWidth(connection.correlation);
             const connectionOpacity = getConnectionOpacity(index);
 
             return (
@@ -419,7 +436,7 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
                 strokeLinecap="round"
                 opacity={connectionOpacity}
                 style={{
-                  transition: "opacity 300ms ease-in-out",
+                  transition: "opacity 300ms ease-in-out, stroke-width 300ms ease-in-out",
                 }}
               />
             );
@@ -434,9 +451,10 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
               return null;
             }
 
-            const fillColor = getNodeColor(node.volatility);
-            const baseRadius = getNodeRadius(node.volatility);
-            const isPulsing = shouldNodePulse(node.volatility);
+            const fillColor = getNodeColorWithThresholds(node.volatility, volatilityThresholds);
+            const connectionCount = getConnectionCount(node.id);
+            const baseRadius = getNodeRadius(connectionCount, connectionStats.p95);
+            const isPulsing = shouldNodePulseWithThresholds(node.volatility, volatilityThresholds);
 
             // Get cluster-based styling
             const nodeOpacity = getNodeOpacity(node.id);
@@ -472,7 +490,9 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
                   x={node.x}
                   y={node.y - nodeRadius - 4}
                   textAnchor="middle"
-                  fill="#94a3b8"
+                  fill="#ffffff"
+                  stroke="rgba(0, 0, 0, 0.5)"
+                  strokeWidth={0.5}
                   fontSize={10}
                   fontFamily="var(--font-geist-sans), system-ui, sans-serif"
                   style={{
@@ -480,7 +500,7 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
                     userSelect: "none",
                   }}
                 >
-                  {node.id}
+                  {node.shortened_name || node.name}
                 </text>
               </g>
             );

@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 async def create_all_relations(
-    similarity_threshold: float = 0.8,
+    similarity_threshold: float = 0.7,
     correlation_threshold: float = 0.0,
     limit_per_market: int = 100,
     skip_existing: bool = True,

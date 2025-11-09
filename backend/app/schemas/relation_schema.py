@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from datetime import datetime
 from app.schemas.market_schema import Market
 
@@ -11,6 +11,11 @@ class RelatedMarket(BaseModel):
     pressure: float = Field(0.0, description="Pressure score")
     ai_correlation_score: Optional[float] = Field(None, description="AI-generated correlation score (0.0-1.0)")
     ai_explanation: Optional[str] = Field(None, description="AI-generated explanation of relationship")
+    investment_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Arbitrage opportunity score (0.0-1.0). Higher = better price differential")
+    investment_rationale: Optional[str] = Field(None, description="Arbitrage opportunity explanation focusing on price differentials")
+    risk_level: Optional[str] = Field(None, description="Risk level: low, medium, high")
+    expected_values: Optional[Dict[str, Any]] = Field(None, description="Expected value calculations for all 4 scenarios")
+    best_strategy: Optional[str] = Field(None, description="Recommended betting strategy based on EV analysis")
 
 class RelationSearchResponse(BaseModel):
     """Response for relation searches"""
@@ -53,6 +58,11 @@ class EnrichedRelatedMarket(BaseModel):
     market: Market = Field(..., description="Full market details")
     ai_correlation_score: Optional[float] = Field(None, description="AI-generated correlation score (0.0-1.0)")
     ai_explanation: Optional[str] = Field(None, description="AI-generated explanation of relationship")
+    investment_score: Optional[float] = Field(None, ge=0.0, le=1.0, description="Arbitrage opportunity score (0.0-1.0). Higher = better price differential")
+    investment_rationale: Optional[str] = Field(None, description="Arbitrage opportunity explanation focusing on price differentials")
+    risk_level: Optional[str] = Field(None, description="Risk level: low, medium, high")
+    expected_values: Optional[Dict[str, Any]] = Field(None, description="Expected value calculations for all 4 scenarios")
+    best_strategy: Optional[str] = Field(None, description="Recommended betting strategy based on EV analysis")
 
 class EnrichedRelationResponse(BaseModel):
     """Response for enriched relation searches with full market data"""
@@ -60,3 +70,40 @@ class EnrichedRelationResponse(BaseModel):
     source_market: Optional[Market] = Field(None, description="Full source market details")
     related_markets: List[EnrichedRelatedMarket] = Field(..., description="List of related markets with full details")
     count: int = Field(..., description="Number of related markets found")
+
+class BatchRelationRequest(BaseModel):
+    """Request schema for batch relation lookup by polymarket IDs"""
+    polymarket_ids: List[str] = Field(..., description="List of polymarket IDs to find relations for", min_length=1, max_length=100)
+
+class BatchRelationResponse(BaseModel):
+    """Response for batch relation lookup"""
+    relations: List[MarketRelation] = Field(..., description="All relations involving the specified markets")
+    total_relations: int = Field(..., description="Total number of relations found")
+    markets_found: int = Field(..., description="Number of input markets that were found in database")
+    markets_not_found: List[str] = Field(default_factory=list, description="Polymarket IDs that were not found in database")
+
+class GraphNode(BaseModel):
+    """Schema for a graph node (market)"""
+    id: str = Field(..., description="Polymarket ID")
+    name: str = Field(..., description="Market question")
+    shortened_name: Optional[str] = Field(None, description="AI-generated shortened name (3 words)")
+    group: str = Field(..., description="Category/tag group")
+    volatility: Optional[float] = Field(None, description="Volatility score (0.0-1.0)")
+    volume: float = Field(..., description="Trading volume")
+    lastUpdate: datetime = Field(..., description="Last update timestamp")
+    market_id: int = Field(..., description="Database ID for reference")
+
+class GraphConnection(BaseModel):
+    """Schema for a graph connection (relation)"""
+    source: str = Field(..., description="Source market polymarket ID")
+    target: str = Field(..., description="Target market polymarket ID")
+    correlation: float = Field(..., description="Correlation score")
+    pressure: float = Field(..., description="Pressure score")
+    similarity: float = Field(..., description="Similarity score")
+
+class GraphResponse(BaseModel):
+    """Response for graph visualization data"""
+    nodes: List[GraphNode] = Field(..., description="Market nodes")
+    connections: List[GraphConnection] = Field(..., description="Market connections")
+    total_nodes: int = Field(..., description="Total number of nodes")
+    total_connections: int = Field(..., description="Total number of connections")

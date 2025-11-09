@@ -45,8 +45,3 @@ class SimilaritySearchResponse(BaseModel):
     """Response for similarity searches"""
     results: List[SimilarityResult]
     count: int
-
-class MarketCorrelationAnalysis(BaseModel):
-    """AI-generated correlation analysis between two markets"""
-    correlation_score: float = Field(..., ge=0.0, le=1.0, description="AI-assessed correlation score (0.0-1.0)")
-    explanation: str = Field(..., description="Brief explanation of how the markets influence each other")

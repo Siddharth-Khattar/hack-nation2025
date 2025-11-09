@@ -328,12 +328,30 @@ function createNode(index: number, random: () => number): GraphNode {
     now.getTime() - minutesAgo * 60 * 1000
   ).toISOString();
 
+  // Mock data uses generic tags - real data comes from API
+  const mockTags = index % 2 === 0 ? ['Politics'] : ['Economy'];
+
+  // Generate realistic volume between $100K and $10M
+  const volume = Math.floor(random() * 9900000 + 100000);
+
+  // Binary outcomes for mock markets
+  const outcomes = ['Yes', 'No'];
+
+  // Generate outcome prices that sum to ~100 (with some variance for realism)
+  const yesPrice = Math.floor(random() * 80 + 10); // 10-90
+  const noPrice = 100 - yesPrice;
+  const outcomePrices = [yesPrice.toString(), noPrice.toString()];
+
   return {
     id: instrumentId,
     name,
     group,
     volatility,
     lastUpdate,
+    tags: mockTags,
+    volume,
+    outcomes,
+    outcomePrices,
   };
 }
 

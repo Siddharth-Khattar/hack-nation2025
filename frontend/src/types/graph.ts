@@ -13,11 +13,17 @@ import { SimulationNodeDatum, SimulationLinkDatum } from "d3-force";
  * - fx, fy: Fixed position coordinates (when dragging)
  */
 export interface GraphNode extends SimulationNodeDatum {
-  /** Unique identifier for the node (e.g., "AAPL", "BTC", "GOLD") */
+  /** Unique identifier for the node (database ID as string) */
   id: string;
 
-  /** Display name of the trading instrument */
+  /** Display name of the trading instrument (shortened for display) */
   name: string;
+
+  /** Shortened name for node display on graph */
+  shortened_name?: string;
+
+  /** Full market question/name for detail view */
+  fullName?: string;
 
   /** Group classification (0-9) for visual clustering and filtering */
   group: string;
@@ -32,6 +38,27 @@ export interface GraphNode extends SimulationNodeDatum {
 
   /** Timestamp of last data update in ISO 8601 format */
   lastUpdate: string;
+
+  /** Optional detailed description of the market/node */
+  description?: string;
+
+  /** Tags/categories associated with the market/node */
+  tags: string[];
+
+  /** Market volume in dollars */
+  volume: number;
+
+  /** Possible outcomes for this market (e.g., ["Yes", "No"]) */
+  outcomes: string[];
+
+  /** Current prices for each outcome (parallel array to outcomes) */
+  outcomePrices: string[];
+
+  /** Polymarket ID for API reference */
+  polymarketId?: string;
+
+  /** Database market ID for internal reference */
+  marketId?: number;
 }
 
 /**
@@ -67,6 +94,14 @@ export interface GraphConnection extends SimulationLinkDatum<GraphNode> {
    * - Indicates market activity/momentum
    */
   pressure: number;
+
+  /**
+   * Distance for D3 force simulation
+   * - Calculated from similarity (inverse relationship)
+   * - Lower value = nodes closer together
+   * - Higher value = nodes further apart
+   */
+  distance?: number;
 }
 
 /**
@@ -177,7 +212,17 @@ export function isGraphNode(obj: unknown): obj is GraphNode {
     typeof node.volatility === "number" &&
     node.volatility >= 0 &&
     node.volatility <= 1 &&
-    typeof node.lastUpdate === "string"
+    typeof node.lastUpdate === "string" &&
+    (node.description === undefined || typeof node.description === "string") &&
+    Array.isArray(node.tags) &&
+    node.tags.every((tag) => typeof tag === "string") &&
+    typeof node.volume === "number" &&
+    node.volume >= 0 &&
+    Array.isArray(node.outcomes) &&
+    node.outcomes.every((outcome) => typeof outcome === "string") &&
+    Array.isArray(node.outcomePrices) &&
+    node.outcomePrices.every((price) => typeof price === "string") &&
+    node.outcomes.length === node.outcomePrices.length
   );
 }
 

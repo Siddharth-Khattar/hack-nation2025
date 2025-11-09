@@ -22,6 +22,7 @@ interface UseForceSimulationProps {
   onSimulationCreated?: (
     simulation: Simulation<GraphNode, GraphConnection>
   ) => void;
+  getNodeRadiusCallback?: (node: GraphNode) => number;
 }
 
 /**
@@ -43,6 +44,7 @@ export function useForceSimulation({
   height,
   onTick,
   onSimulationCreated,
+  getNodeRadiusCallback,
 }: UseForceSimulationProps) {
   const simulationRef = useRef<Simulation<GraphNode, GraphConnection> | null>(
     null
@@ -69,7 +71,8 @@ export function useForceSimulation({
         "link",
         forceLink<GraphNode, GraphConnection>(connections)
           .id((d) => d.id)
-          .distance(100) // Preferred distance between connected nodes
+          // Use distance from connection if available (calculated from similarity), otherwise default
+          .distance((d) => (d.distance ? 10 * d.distance : 100))
           .strength((d) => d.correlation) // Stronger correlation = stronger spring
       )
       // Many-body force: nodes repel each other
@@ -82,11 +85,16 @@ export function useForceSimulation({
       // Center force: pulls graph toward viewport center
       .force("center", forceCenter<GraphNode>(width / 2, height / 2))
       // Collision force: prevents node overlap
-      // Uses dynamic radius based on each node's volatility, with padding for spacing
+      // Uses dynamic radius (either custom callback or volatility-based), with padding for spacing
       .force(
         "collide",
         forceCollide<GraphNode>()
-          .radius((node) => getNodeRadius(node.volatility) + 3) // Visual radius + 3px padding
+          .radius((node) => {
+            const baseRadius = getNodeRadiusCallback
+              ? getNodeRadiusCallback(node)
+              : getNodeRadius(node.volatility);
+            return baseRadius + 3; // Visual radius + 3px padding
+          })
           .strength(0.7)
       );
 
@@ -111,7 +119,7 @@ export function useForceSimulation({
       simulation.stop();
       simulationRef.current = null;
     };
-  }, [nodes, connections, width, height, onTick, onSimulationCreated]);
+  }, [nodes, connections, width, height, onTick, onSimulationCreated, getNodeRadiusCallback]);
 
   // Return a stable getter function for accessing the simulation
   const getSimulation = useCallback(() => simulationRef.current, []);

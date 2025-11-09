@@ -7,6 +7,7 @@ from supabase import create_client, Client
 from app.core.config import settings
 from app.schemas.market_schema import Market, MarketCreate, MarketUpdate
 from app.schemas.vector_schema import VectorEmbedding
+from app.schemas.name_schema import ShortenedName
 import logging
 
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class DatabaseService:
     async def create_market(self, market_data: MarketCreate) -> Market:
         """
         Create a new market in the database.
+        Returns the created market with volatility data.
         
         Args:
             market_data: Market data to create
@@ -49,7 +51,9 @@ class DatabaseService:
             response = self.client.table('markets').insert(data).execute()
             
             if response.data:
-                return Market(**response.data[0])
+                market_id = response.data[0]['id']
+                # Fetch the created market with volatility data
+                return await self.get_market_by_id(market_id)
             else:
                 raise Exception("Failed to create market: No data returned")
                 
@@ -60,6 +64,7 @@ class DatabaseService:
     async def get_market_by_id(self, market_id: int) -> Optional[Market]:
         """
         Retrieve a market by its database ID.
+        Includes volatility data via LEFT JOIN.
         
         Args:
             market_id: Database ID of the market
@@ -68,10 +73,31 @@ class DatabaseService:
             Market object if found, None otherwise
         """
         try:
-            response = self.client.table('markets').select('*').eq('id', market_id).execute()
+            response = self.client.table('markets').select(
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
+            ).eq('id', market_id).execute()
             
             if response.data:
-                return Market(**response.data[0])
+                market_data = response.data[0]
+                market_dict = dict(market_data)
+                
+                # Extract and flatten volatility data
+                volatility = market_dict.pop('market_volatility', None)
+                vol_data = None
+                if volatility:
+                    if isinstance(volatility, dict):
+                        vol_data = volatility
+                    elif isinstance(volatility, list) and len(volatility) > 0:
+                        vol_data = volatility[0]
+                
+                if vol_data and isinstance(vol_data, dict):
+                    market_dict['real_volatility_24h'] = vol_data.get('real_volatility_24h')
+                    market_dict['proxy_volatility_24h'] = vol_data.get('proxy_volatility_24h')
+                    market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
+                    market_dict['volatility_data_points'] = vol_data.get('data_points')
+                    market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
+                
+                return Market(**market_dict)
             return None
             
         except Exception as e:
@@ -83,6 +109,7 @@ class DatabaseService:
         Retrieve multiple markets by their database IDs in a single query.
         Much faster than calling get_market_by_id() repeatedly!
         Includes automatic retry logic for transient failures (like 521 errors).
+        Includes volatility data via LEFT JOIN.
         
         Args:
             market_ids: List of database IDs
@@ -101,10 +128,33 @@ class DatabaseService:
         
         for attempt in range(max_retries):
             try:
-                # Supabase 'in' filter for batch retrieval
-                response = self.client.table('markets').select('*').in_('id', market_ids).execute()
+                # Supabase 'in' filter for batch retrieval with volatility join
+                response = self.client.table('markets').select(
+                    '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
+                ).in_('id', market_ids).execute()
                 
-                return [Market(**market) for market in response.data]
+                # Process the joined data
+                markets = []
+                for market_data in response.data:
+                    market_dict = dict(market_data)
+                    volatility = market_dict.pop('market_volatility', None)
+                    
+                    vol_data = None
+                    if volatility:
+                        if isinstance(volatility, dict):
+                            vol_data = volatility
+                        elif isinstance(volatility, list) and len(volatility) > 0:
+                            vol_data = volatility[0]
+                    
+                    if vol_data and isinstance(vol_data, dict):
+                        market_dict['real_volatility_24h'] = vol_data.get('real_volatility_24h')
+                        market_dict['proxy_volatility_24h'] = vol_data.get('proxy_volatility_24h')
+                        market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
+                        market_dict['volatility_data_points'] = vol_data.get('data_points')
+                        market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
+                    markets.append(Market(**market_dict))
+                
+                return markets
                 
             except Exception as e:
                 error_msg = str(e)
@@ -121,6 +171,7 @@ class DatabaseService:
     async def get_market_by_polymarket_id(self, polymarket_id: str) -> Optional[Market]:
         """
         Retrieve a market by its Polymarket ID.
+        Includes volatility data via LEFT JOIN.
         
         Args:
             polymarket_id: Polymarket identifier
@@ -129,10 +180,31 @@ class DatabaseService:
             Market object if found, None otherwise
         """
         try:
-            response = self.client.table('markets').select('*').eq('polymarket_id', polymarket_id).execute()
+            response = self.client.table('markets').select(
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
+            ).eq('polymarket_id', polymarket_id).execute()
             
             if response.data:
-                return Market(**response.data[0])
+                market_data = response.data[0]
+                market_dict = dict(market_data)
+                
+                # Extract and flatten volatility data
+                volatility = market_dict.pop('market_volatility', None)
+                vol_data = None
+                if volatility:
+                    if isinstance(volatility, dict):
+                        vol_data = volatility
+                    elif isinstance(volatility, list) and len(volatility) > 0:
+                        vol_data = volatility[0]
+                
+                if vol_data and isinstance(vol_data, dict):
+                    market_dict['real_volatility_24h'] = vol_data.get('real_volatility_24h')
+                    market_dict['proxy_volatility_24h'] = vol_data.get('proxy_volatility_24h')
+                    market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
+                    market_dict['volatility_data_points'] = vol_data.get('data_points')
+                    market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
+                
+                return Market(**market_dict)
             return None
             
         except Exception as e:
@@ -149,6 +221,7 @@ class DatabaseService:
     ) -> List[Market]:
         """
         Retrieve multiple markets with filtering and pagination.
+        Includes volatility scores via LEFT JOIN with market_volatility table.
         
         Args:
             limit: Maximum number of markets to return
@@ -158,10 +231,14 @@ class DatabaseService:
             ascending: Sort order (False = descending)
             
         Returns:
-            List of Market objects
+            List of Market objects with volatility data
         """
         try:
-            query = self.client.table('markets').select('*')
+            # LEFT JOIN with market_volatility table to get volatility scores
+            # Using the foreign key name to specify the relationship
+            query = self.client.table('markets').select(
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
+            )
             
             # Apply filters
             if is_active is not None:
@@ -175,15 +252,60 @@ class DatabaseService:
             
             response = query.execute()
             
-            return [Market(**market) for market in response.data]
+            # Debug: log first market structure if available
+            if response.data and len(response.data) > 0:
+                logger.info(f"Sample market data structure: {list(response.data[0].keys())}")
+                if 'market_volatility' in response.data[0]:
+                    logger.info(f"Volatility data type: {type(response.data[0]['market_volatility'])}, value: {response.data[0]['market_volatility']}")
+            
+            # Process the joined data
+            markets = []
+            for market_data in response.data:
+                try:
+                    # Make a copy to avoid modifying the original
+                    market_dict = dict(market_data)
+                    
+                    # Extract volatility data from nested structure
+                    volatility = market_dict.pop('market_volatility', None)
+                    
+                    # If volatility data exists, flatten it into market data
+                    # Supabase returns a dict for one-to-one relationships, list for one-to-many
+                    vol_data = None
+                    if volatility:
+                        if isinstance(volatility, dict):
+                            vol_data = volatility
+                        elif isinstance(volatility, list) and len(volatility) > 0:
+                            vol_data = volatility[0]
+                    
+                    if vol_data and isinstance(vol_data, dict):
+                        market_dict['real_volatility_24h'] = vol_data.get('real_volatility_24h')
+                        market_dict['proxy_volatility_24h'] = vol_data.get('proxy_volatility_24h')
+                        market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
+                        market_dict['volatility_data_points'] = vol_data.get('data_points')
+                        market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
+                    
+                    markets.append(Market(**market_dict))
+                except Exception as e:
+                    logger.error(f"Error processing market data: {e}, market_data keys: {list(market_data.keys())}")
+                    # Try to create market without volatility data as fallback
+                    try:
+                        market_dict = dict(market_data)
+                        market_dict.pop('market_volatility', None)
+                        markets.append(Market(**market_dict))
+                    except Exception as e2:
+                        logger.error(f"Error creating market even without volatility: {e2}")
+                        raise
+            
+            return markets
             
         except Exception as e:
-            logger.error(f"Error retrieving markets: {e}")
+            logger.error(f"Error retrieving markets: {e}", exc_info=True)
             raise
     
     async def update_market(self, market_id: int, update_data: MarketUpdate) -> Optional[Market]:
         """
         Update an existing market.
+        Returns the updated market with volatility data.
         
         Args:
             market_id: Database ID of the market to update
@@ -199,7 +321,8 @@ class DatabaseService:
             response = self.client.table('markets').update(data).eq('id', market_id).execute()
             
             if response.data:
-                return Market(**response.data[0])
+                # Fetch the updated market with volatility data
+                return await self.get_market_by_id(market_id)
             return None
             
         except Exception as e:
@@ -284,6 +407,7 @@ class DatabaseService:
         """
         Search markets by question or description.
         Uses Supabase full-text search if available, otherwise filters.
+        Includes volatility data via LEFT JOIN.
         
         Args:
             query: Search query string
@@ -293,12 +417,35 @@ class DatabaseService:
             List of matching Market objects
         """
         try:
-            # Use ilike for case-insensitive partial match
-            response = self.client.table('markets').select('*').or_(
+            # Use ilike for case-insensitive partial match with volatility join
+            response = self.client.table('markets').select(
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
+            ).or_(
                 f"question.ilike.%{query}%,description.ilike.%{query}%"
             ).limit(limit).execute()
             
-            return [Market(**market) for market in response.data]
+            # Process the joined data
+            markets = []
+            for market_data in response.data:
+                market_dict = dict(market_data)
+                volatility = market_dict.pop('market_volatility', None)
+                
+                vol_data = None
+                if volatility:
+                    if isinstance(volatility, dict):
+                        vol_data = volatility
+                    elif isinstance(volatility, list) and len(volatility) > 0:
+                        vol_data = volatility[0]
+                
+                if vol_data and isinstance(vol_data, dict):
+                    market_dict['real_volatility_24h'] = vol_data.get('real_volatility_24h')
+                    market_dict['proxy_volatility_24h'] = vol_data.get('proxy_volatility_24h')
+                    market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
+                    market_dict['volatility_data_points'] = vol_data.get('data_points')
+                    market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
+                markets.append(Market(**market_dict))
+            
+            return markets
             
         except Exception as e:
             logger.error(f"Error searching markets: {e}")
@@ -312,6 +459,7 @@ class DatabaseService:
     ) -> List[Market]:
         """
         Get markets within a date range.
+        Includes volatility data via LEFT JOIN.
         
         Args:
             start_date: Start of date range
@@ -322,13 +470,36 @@ class DatabaseService:
             List of Market objects
         """
         try:
-            response = self.client.table('markets').select('*').gte(
+            response = self.client.table('markets').select(
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
+            ).gte(
                 'end_date', start_date.isoformat()
             ).lte(
                 'end_date', end_date.isoformat()
             ).limit(limit).execute()
             
-            return [Market(**market) for market in response.data]
+            # Process the joined data
+            markets = []
+            for market_data in response.data:
+                market_dict = dict(market_data)
+                volatility = market_dict.pop('market_volatility', None)
+                
+                vol_data = None
+                if volatility:
+                    if isinstance(volatility, dict):
+                        vol_data = volatility
+                    elif isinstance(volatility, list) and len(volatility) > 0:
+                        vol_data = volatility[0]
+                
+                if vol_data and isinstance(vol_data, dict):
+                    market_dict['real_volatility_24h'] = vol_data.get('real_volatility_24h')
+                    market_dict['proxy_volatility_24h'] = vol_data.get('proxy_volatility_24h')
+                    market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
+                    market_dict['volatility_data_points'] = vol_data.get('data_points')
+                    market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
+                markets.append(Market(**market_dict))
+            
+            return markets
             
         except Exception as e:
             logger.error(f"Error getting markets by date range: {e}")
@@ -567,6 +738,146 @@ class DatabaseService:
             
         except Exception as e:
             logger.error(f"Batch embedding storage failed: {e}")
+            raise
+    
+    # ==================== SHORTENED NAME OPERATIONS ====================
+    
+    async def store_shortened_name(
+        self,
+        market_id: int,
+        original_name: str,
+        shortened_name: str
+    ) -> ShortenedName:
+        """
+        Store or update a shortened name for a market.
+        
+        Args:
+            market_id: Market database ID
+            original_name: Original market question
+            shortened_name: Shortened name (3 words)
+            
+        Returns:
+            ShortenedName object
+        """
+        try:
+            # Check if exists
+            existing = await self.get_shortened_name(market_id)
+            now = datetime.utcnow().isoformat()
+            
+            if existing:
+                # Update existing
+                data = {
+                    'market_id': market_id,
+                    'original_name': original_name,
+                    'shortened_name': shortened_name,
+                    'updated_at': now
+                }
+            else:
+                # Create new
+                data = {
+                    'market_id': market_id,
+                    'original_name': original_name,
+                    'shortened_name': shortened_name,
+                    'created_at': now,
+                    'updated_at': now
+                }
+            
+            # Upsert: update if exists, insert if not
+            response = self.client.table('shortened_names').upsert(
+                data,
+                on_conflict='market_id'
+            ).execute()
+            
+            if response.data:
+                return ShortenedName(**response.data[0])
+            raise Exception("Failed to store shortened name")
+            
+        except Exception as e:
+            logger.error(f"Error storing shortened name: {e}")
+            raise
+    
+    async def get_shortened_name(self, market_id: int) -> Optional[ShortenedName]:
+        """
+        Get shortened name for a market.
+        
+        Args:
+            market_id: Market database ID
+            
+        Returns:
+            ShortenedName if found, None otherwise
+        """
+        try:
+            response = self.client.table('shortened_names').select('*').eq('market_id', market_id).execute()
+            
+            if response.data:
+                return ShortenedName(**response.data[0])
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error getting shortened name: {e}")
+            raise
+    
+    async def batch_get_shortened_names(self, market_ids: List[int]) -> List[ShortenedName]:
+        """
+        Get shortened names for multiple markets.
+        
+        Args:
+            market_ids: List of market database IDs
+            
+        Returns:
+            List of ShortenedName objects
+        """
+        try:
+            if not market_ids:
+                return []
+            
+            response = self.client.table('shortened_names').select('*').in_('market_id', market_ids).execute()
+            
+            return [ShortenedName(**name) for name in response.data]
+            
+        except Exception as e:
+            logger.error(f"Error batch getting shortened names: {e}")
+            raise
+    
+    async def get_all_shortened_names(
+        self,
+        limit: int = 100,
+        offset: int = 0
+    ) -> List[ShortenedName]:
+        """
+        Get all shortened names with pagination.
+        
+        Args:
+            limit: Maximum number of results
+            offset: Number of results to skip
+            
+        Returns:
+            List of ShortenedName objects
+        """
+        try:
+            response = self.client.table('shortened_names').select('*').order(
+                'created_at', desc=True
+            ).range(offset, offset + limit - 1).execute()
+            
+            return [ShortenedName(**name) for name in response.data]
+            
+        except Exception as e:
+            logger.error(f"Error getting all shortened names: {e}")
+            raise
+    
+    async def count_shortened_names(self) -> int:
+        """
+        Count total number of shortened names.
+        
+        Returns:
+            Total count
+        """
+        try:
+            response = self.client.table('shortened_names').select('id', count='exact').execute()
+            return response.count if response.count is not None else 0
+            
+        except Exception as e:
+            logger.error(f"Error counting shortened names: {e}")
             raise
 
 
