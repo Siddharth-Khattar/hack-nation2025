@@ -1,5 +1,7 @@
 # Hack-Nation
 
+🌐 **Live Demo**: [https://bet-graph.vercel.app/](https://bet-graph.vercel.app/)
+
 Welcome to Hack-Nation, a full-stack platform for analyzing and visualizing data from Polymarket, a decentralized prediction market. This project combines a powerful Python backend for data processing with a dynamic Next.js frontend for interactive visualization, along with a set of autonomous agents for automated data collection and trading.
 
 ## Table of Contents
