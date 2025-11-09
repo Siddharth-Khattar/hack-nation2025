@@ -49,18 +49,6 @@ class Market(MarketBase):
     volatility_calculation_method: Optional[str] = Field(None, description="Method used to calculate volatility")
     volatility_data_points: Optional[int] = Field(None, description="Number of data points used in volatility calculation")
     volatility_calculated_at: Optional[datetime] = Field(None, description="When the volatility was last calculated")
-    
-    # Shortened name field from shortened_names table (via join)
-    shortened_name: Optional[str] = Field(None, description="AI-generated shortened name (3 words)")
-
-    @computed_field
-    @property
-    def volatility_24h(self) -> Optional[float]:
-        """
-        Best available volatility score: real if available, otherwise proxy.
-        This provides a single field that's always populated with the best volatility estimate.
-        """
-        return self.real_volatility_24h if self.real_volatility_24h is not None else self.proxy_volatility_24h
 
     class Config:
         from_attributes = True

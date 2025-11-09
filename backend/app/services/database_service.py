@@ -74,7 +74,7 @@ class DatabaseService:
         """
         try:
             response = self.client.table('markets').select(
-                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at), shortened_names!shortened_names_market_id_fkey(shortened_name)'
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
             ).eq('id', market_id).execute()
             
             if response.data:
@@ -96,17 +96,6 @@ class DatabaseService:
                     market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
                     market_dict['volatility_data_points'] = vol_data.get('data_points')
                     market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
-                
-                # Extract shortened name data
-                shortened_name_data = market_dict.pop('shortened_names', None)
-                shortened_name_value = None
-                if shortened_name_data:
-                    if isinstance(shortened_name_data, dict):
-                        shortened_name_value = shortened_name_data.get('shortened_name')
-                    elif isinstance(shortened_name_data, list) and len(shortened_name_data) > 0:
-                        shortened_name_value = shortened_name_data[0].get('shortened_name')
-                
-                market_dict['shortened_name'] = shortened_name_value
                 
                 return Market(**market_dict)
             return None
@@ -139,9 +128,9 @@ class DatabaseService:
         
         for attempt in range(max_retries):
             try:
-                # Supabase 'in' filter for batch retrieval with volatility and shortened names join
+                # Supabase 'in' filter for batch retrieval with volatility join
                 response = self.client.table('markets').select(
-                    '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at), shortened_names!shortened_names_market_id_fkey(shortened_name)'
+                    '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
                 ).in_('id', market_ids).execute()
                 
                 # Process the joined data
@@ -163,17 +152,6 @@ class DatabaseService:
                         market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
                         market_dict['volatility_data_points'] = vol_data.get('data_points')
                         market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
-                    
-                    # Extract shortened name data
-                    shortened_name_data = market_dict.pop('shortened_names', None)
-                    shortened_name_value = None
-                    if shortened_name_data:
-                        if isinstance(shortened_name_data, dict):
-                            shortened_name_value = shortened_name_data.get('shortened_name')
-                        elif isinstance(shortened_name_data, list) and len(shortened_name_data) > 0:
-                            shortened_name_value = shortened_name_data[0].get('shortened_name')
-                    
-                    market_dict['shortened_name'] = shortened_name_value
                     markets.append(Market(**market_dict))
                 
                 return markets
@@ -203,7 +181,7 @@ class DatabaseService:
         """
         try:
             response = self.client.table('markets').select(
-                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at), shortened_names!shortened_names_market_id_fkey(shortened_name)'
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
             ).eq('polymarket_id', polymarket_id).execute()
             
             if response.data:
@@ -225,17 +203,6 @@ class DatabaseService:
                     market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
                     market_dict['volatility_data_points'] = vol_data.get('data_points')
                     market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
-                
-                # Extract shortened name data
-                shortened_name_data = market_dict.pop('shortened_names', None)
-                shortened_name_value = None
-                if shortened_name_data:
-                    if isinstance(shortened_name_data, dict):
-                        shortened_name_value = shortened_name_data.get('shortened_name')
-                    elif isinstance(shortened_name_data, list) and len(shortened_name_data) > 0:
-                        shortened_name_value = shortened_name_data[0].get('shortened_name')
-                
-                market_dict['shortened_name'] = shortened_name_value
                 
                 return Market(**market_dict)
             return None
@@ -267,10 +234,10 @@ class DatabaseService:
             List of Market objects with volatility data
         """
         try:
-            # LEFT JOIN with market_volatility and shortened_names tables
-            # Using the foreign key names to specify the relationships
+            # LEFT JOIN with market_volatility table to get volatility scores
+            # Using the foreign key name to specify the relationship
             query = self.client.table('markets').select(
-                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at), shortened_names!shortened_names_market_id_fkey(shortened_name)'
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
             )
             
             # Apply filters
@@ -317,28 +284,16 @@ class DatabaseService:
                         market_dict['volatility_data_points'] = vol_data.get('data_points')
                         market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
                     
-                    # Extract shortened name data from nested structure
-                    shortened_name_data = market_dict.pop('shortened_names', None)
-                    shortened_name_value = None
-                    if shortened_name_data:
-                        if isinstance(shortened_name_data, dict):
-                            shortened_name_value = shortened_name_data.get('shortened_name')
-                        elif isinstance(shortened_name_data, list) and len(shortened_name_data) > 0:
-                            shortened_name_value = shortened_name_data[0].get('shortened_name')
-                    
-                    market_dict['shortened_name'] = shortened_name_value
-                    
                     markets.append(Market(**market_dict))
                 except Exception as e:
                     logger.error(f"Error processing market data: {e}, market_data keys: {list(market_data.keys())}")
-                    # Try to create market without volatility/shortened name data as fallback
+                    # Try to create market without volatility data as fallback
                     try:
                         market_dict = dict(market_data)
                         market_dict.pop('market_volatility', None)
-                        market_dict.pop('shortened_names', None)
                         markets.append(Market(**market_dict))
                     except Exception as e2:
-                        logger.error(f"Error creating market even without joins: {e2}")
+                        logger.error(f"Error creating market even without volatility: {e2}")
                         raise
             
             return markets
@@ -462,9 +417,9 @@ class DatabaseService:
             List of matching Market objects
         """
         try:
-            # Use ilike for case-insensitive partial match with volatility and shortened names join
+            # Use ilike for case-insensitive partial match with volatility join
             response = self.client.table('markets').select(
-                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at), shortened_names!shortened_names_market_id_fkey(shortened_name)'
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
             ).or_(
                 f"question.ilike.%{query}%,description.ilike.%{query}%"
             ).limit(limit).execute()
@@ -488,17 +443,6 @@ class DatabaseService:
                     market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
                     market_dict['volatility_data_points'] = vol_data.get('data_points')
                     market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
-                
-                # Extract shortened name data
-                shortened_name_data = market_dict.pop('shortened_names', None)
-                shortened_name_value = None
-                if shortened_name_data:
-                    if isinstance(shortened_name_data, dict):
-                        shortened_name_value = shortened_name_data.get('shortened_name')
-                    elif isinstance(shortened_name_data, list) and len(shortened_name_data) > 0:
-                        shortened_name_value = shortened_name_data[0].get('shortened_name')
-                
-                market_dict['shortened_name'] = shortened_name_value
                 markets.append(Market(**market_dict))
             
             return markets
@@ -527,7 +471,7 @@ class DatabaseService:
         """
         try:
             response = self.client.table('markets').select(
-                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at), shortened_names!shortened_names_market_id_fkey(shortened_name)'
+                '*, market_volatility!market_volatility_market_id_fkey(real_volatility_24h, proxy_volatility_24h, calculation_method, data_points, calculated_at)'
             ).gte(
                 'end_date', start_date.isoformat()
             ).lte(
@@ -553,17 +497,6 @@ class DatabaseService:
                     market_dict['volatility_calculation_method'] = vol_data.get('calculation_method')
                     market_dict['volatility_data_points'] = vol_data.get('data_points')
                     market_dict['volatility_calculated_at'] = vol_data.get('calculated_at')
-                
-                # Extract shortened name data
-                shortened_name_data = market_dict.pop('shortened_names', None)
-                shortened_name_value = None
-                if shortened_name_data:
-                    if isinstance(shortened_name_data, dict):
-                        shortened_name_value = shortened_name_data.get('shortened_name')
-                    elif isinstance(shortened_name_data, list) and len(shortened_name_data) > 0:
-                        shortened_name_value = shortened_name_data[0].get('shortened_name')
-                
-                market_dict['shortened_name'] = shortened_name_value
                 markets.append(Market(**market_dict))
             
             return markets
