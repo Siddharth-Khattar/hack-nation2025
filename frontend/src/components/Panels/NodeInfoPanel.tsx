@@ -7,6 +7,7 @@ import { useState } from "react";
 import type { GraphNode } from "@/types/graph";
 import { getNodeColor } from "@/lib/d3-helpers";
 import { formatTimestamp } from "@/lib/utils";
+import { usePanelState } from "@/hooks/usePanelState";
 
 interface NodeInfoPanelProps {
   /** All nodes in the graph for list view */
@@ -35,7 +36,7 @@ export function NodeInfoPanel({
   selectedNode,
   onNodeSelect,
 }: NodeInfoPanelProps) {
-  const [isCollapsed, setIsCollapsed] = useState(true);
+  const { isCollapsed, toggleCollapse } = usePanelState("node-info", true);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
   return (
@@ -89,7 +90,7 @@ export function NodeInfoPanel({
 
           {/* Collapse toggle button */}
           <button
-            onClick={() => setIsCollapsed(!isCollapsed)}
+            onClick={toggleCollapse}
             aria-label={isCollapsed ? "Expand panel" : "Collapse panel"}
             title={isCollapsed ? "Expand panel" : "Collapse panel"}
             style={{

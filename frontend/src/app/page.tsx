@@ -8,6 +8,7 @@ import { ForceGraph } from "@/components/ForceGraph/ForceGraph";
 import { ZoomControls } from "@/components/Controls/ZoomControls";
 import { SearchBar } from "@/components/Controls/SearchBar";
 import { NodeInfoPanel } from "@/components/Panels/NodeInfoPanel";
+import { HotTradesPanel } from "@/components/Panels/HotTradesPanel";
 import { isGraphData } from "@/types/graph";
 import type { ZoomController } from "@/hooks/useZoom";
 import type { ClusterController } from "@/types/graph";
@@ -83,6 +84,7 @@ export default function Home() {
             onNodeSelect={(nodeId) => clusterController.selectNode(nodeId)}
             onClear={() => clusterController.clearSelection()}
           />
+          <HotTradesPanel />
         </>
       )}
       {zoomController && (
