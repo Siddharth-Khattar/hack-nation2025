@@ -3,7 +3,7 @@
 
 "use client";
 
-import { useCallback, useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect, useMemo } from "react";
 import { select } from "d3-selection";
 import type { Simulation } from "d3-force";
 import { type ZoomTransform, zoomIdentity } from "d3-zoom";
@@ -13,12 +13,13 @@ import { createDragBehaviorWithClick } from "@/hooks/useDrag";
 import { createZoomBehavior, type ZoomController } from "@/hooks/useZoom";
 import { useCluster } from "@/hooks/useCluster";
 import {
-  getNodeColor,
+  getNodeColorWithThresholds,
   getConnectionWidth,
   getConnectionColor,
   getNodeRadius,
-  shouldNodePulse,
+  shouldNodePulseWithThresholds,
 } from "@/lib/d3-helpers";
+import { calculateVolatilityThresholds } from "@/utils/percentile";
 
 interface ForceGraphProps {
   data: GraphData;
@@ -86,6 +87,12 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
     getNodeScale,
     adjacencyMap,
   } = useCluster(mutableData.nodes, mutableData.connections);
+
+  // Calculate volatility thresholds from current nodes for dynamic color scaling
+  const volatilityThresholds = useMemo(() => {
+    const volatilities = mutableData.nodes.map(node => node.volatility);
+    return calculateVolatilityThresholds(volatilities);
+  }, [mutableData.nodes]);
 
   // Callback to force re-render when simulation updates node positions
   const handleTick = useCallback(() => {
@@ -434,9 +441,9 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
               return null;
             }
 
-            const fillColor = getNodeColor(node.volatility);
+            const fillColor = getNodeColorWithThresholds(node.volatility, volatilityThresholds);
             const baseRadius = getNodeRadius(node.volatility);
-            const isPulsing = shouldNodePulse(node.volatility);
+            const isPulsing = shouldNodePulseWithThresholds(node.volatility, volatilityThresholds);
 
             // Get cluster-based styling
             const nodeOpacity = getNodeOpacity(node.id);
@@ -480,7 +487,7 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
                     userSelect: "none",
                   }}
                 >
-                  {node.id}
+                  {node.shortened_name || node.name}
                 </text>
               </g>
             );

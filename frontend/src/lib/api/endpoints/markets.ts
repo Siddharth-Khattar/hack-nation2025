@@ -20,7 +20,7 @@ import { ValidationError } from '../errors';
 export async function getMarkets(params?: GetMarketsParams): Promise<MarketListResponse> {
   const response = await apiClient.get<MarketListResponse>(
     '/api/markets/',
-    { params }
+    { params: params ? { ...params } : undefined }
   );
 
   // Validate response structure
@@ -73,7 +73,7 @@ export async function getMarketByPolymarketId(polymarketId: string): Promise<Mar
 export async function searchMarkets(params: SearchMarketsParams): Promise<MarketListResponse> {
   const response = await apiClient.get<MarketListResponse>(
     '/api/markets/search/query',
-    { params }
+    { params: { ...params } }
   );
 
   // Validate response structure

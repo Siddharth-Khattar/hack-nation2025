@@ -22,6 +22,8 @@ export interface Market {
   created_at: string; // ISO 8601 datetime
   updated_at: string; // ISO 8601 datetime
   last_scraped_at?: string | null; // ISO 8601 datetime
+  shortened_name?: string; // Added field for shortened display name
+  volatility_24h?: number | null; // 0.0-1.0 volatility score
 }
 
 /**
@@ -140,6 +142,50 @@ export interface GetRelationsParams {
 export type GetEnrichedRelationsParams = GetRelationsParams;
 
 /**
+ * Graph node from /api/relations/graph endpoint
+ */
+export interface GraphNodeResponse {
+  id: string; // polymarket_id
+  name: string; // Full market question
+  shortened_name?: string; // Shortened display name
+  group: string; // Category/tag group
+  volatility?: number | null; // 0.0-1.0
+  volume: number;
+  lastUpdate: string; // ISO 8601 datetime
+  market_id: number; // Database ID for reference
+}
+
+/**
+ * Graph connection from /api/relations/graph endpoint
+ */
+export interface GraphConnectionResponse {
+  source: string; // polymarket_id
+  target: string; // polymarket_id
+  correlation: number; // 0.0-1.0
+  pressure: number; // 0.0-1.0
+  similarity: number; // 0.0-1.0
+}
+
+/**
+ * Complete graph response from /api/relations/graph endpoint
+ */
+export interface GraphResponse {
+  nodes: GraphNodeResponse[];
+  connections: GraphConnectionResponse[];
+  total_nodes: number;
+  total_connections: number;
+}
+
+/**
+ * Parameters for GET /api/relations/graph
+ */
+export interface GetGraphParams {
+  limit?: number; // 1-500, default 100
+  min_similarity?: number; // 0.0-1.0, default 0.7
+  is_active?: boolean | null; // default true
+}
+
+/**
  * Validation error response from API
  */
 export interface HTTPValidationError {
@@ -248,5 +294,55 @@ export function isEnrichedRelationResponse(obj: unknown): obj is EnrichedRelatio
       typeof rm.similarity === 'number' &&
       isMarket(rm.market)
     )
+  );
+}
+
+/**
+ * Type guard to check if object is a GraphNodeResponse
+ */
+export function isGraphNodeResponse(obj: unknown): obj is GraphNodeResponse {
+  if (typeof obj !== 'object' || obj === null) return false;
+
+  const node = obj as GraphNodeResponse;
+  return (
+    typeof node.id === 'string' &&
+    typeof node.name === 'string' &&
+    typeof node.group === 'string' &&
+    typeof node.volume === 'number' &&
+    typeof node.lastUpdate === 'string' &&
+    typeof node.market_id === 'number'
+  );
+}
+
+/**
+ * Type guard to check if object is a GraphConnectionResponse
+ */
+export function isGraphConnectionResponse(obj: unknown): obj is GraphConnectionResponse {
+  if (typeof obj !== 'object' || obj === null) return false;
+
+  const connection = obj as GraphConnectionResponse;
+  return (
+    typeof connection.source === 'string' &&
+    typeof connection.target === 'string' &&
+    typeof connection.correlation === 'number' &&
+    typeof connection.pressure === 'number' &&
+    typeof connection.similarity === 'number'
+  );
+}
+
+/**
+ * Type guard to check if object is a GraphResponse
+ */
+export function isGraphResponse(obj: unknown): obj is GraphResponse {
+  if (typeof obj !== 'object' || obj === null) return false;
+
+  const response = obj as GraphResponse;
+  return (
+    Array.isArray(response.nodes) &&
+    response.nodes.every(isGraphNodeResponse) &&
+    Array.isArray(response.connections) &&
+    response.connections.every(isGraphConnectionResponse) &&
+    typeof response.total_nodes === 'number' &&
+    typeof response.total_connections === 'number'
   );
 }

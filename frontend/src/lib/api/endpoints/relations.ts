@@ -9,8 +9,10 @@ import type {
   GetRelationsParams,
   GetEnrichedRelationsParams,
   SimilaritySearchResponse,
+  GraphResponse,
+  GetGraphParams,
 } from '../types';
-import { isRelationSearchResponse, isEnrichedRelationResponse } from '../types';
+import { isRelationSearchResponse, isEnrichedRelationResponse, isGraphResponse } from '../types';
 import { ValidationError } from '../errors';
 
 /**
@@ -25,7 +27,7 @@ export async function getRelatedMarkets(
 ): Promise<RelationSearchResponse> {
   const response = await apiClient.get<RelationSearchResponse>(
     `/api/relations/${marketId}`,
-    { params }
+    { params: params ? { ...params } : undefined }
   );
 
   // Validate response structure
@@ -48,7 +50,7 @@ export async function getEnrichedRelatedMarkets(
 ): Promise<EnrichedRelationResponse> {
   const response = await apiClient.get<EnrichedRelationResponse>(
     `/api/relations/${marketId}/enriched`,
-    { params }
+    { params: params ? { ...params } : undefined }
   );
 
   // Validate response structure
@@ -228,4 +230,26 @@ export async function getAllEnrichedRelationsForMarkets(
   }
 
   return relationsMap;
+}
+
+/**
+ * Get complete graph data for visualization
+ * Uses the optimized /api/relations/graph endpoint
+ * @param params - Query parameters
+ * @returns Promise resolving to graph response
+ */
+export async function getGraphVisualization(
+  params?: GetGraphParams
+): Promise<GraphResponse> {
+  const response = await apiClient.get<GraphResponse>(
+    '/api/relations/graph',
+    { params: params ? { ...params } : undefined }
+  );
+
+  // Validate response structure
+  if (!isGraphResponse(response)) {
+    throw new ValidationError('Invalid graph response structure');
+  }
+
+  return response;
 }

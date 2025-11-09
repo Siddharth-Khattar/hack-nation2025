@@ -69,7 +69,8 @@ export function useForceSimulation({
         "link",
         forceLink<GraphNode, GraphConnection>(connections)
           .id((d) => d.id)
-          .distance(100) // Preferred distance between connected nodes
+          // Use distance from connection if available (calculated from similarity), otherwise default
+          .distance((d) => (d.distance ? 10 * d.distance : 100))
           .strength((d) => d.correlation) // Stronger correlation = stronger spring
       )
       // Many-body force: nodes repel each other

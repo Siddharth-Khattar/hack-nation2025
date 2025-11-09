@@ -13,11 +13,17 @@ import { SimulationNodeDatum, SimulationLinkDatum } from "d3-force";
  * - fx, fy: Fixed position coordinates (when dragging)
  */
 export interface GraphNode extends SimulationNodeDatum {
-  /** Unique identifier for the node (e.g., "AAPL", "BTC", "GOLD") */
+  /** Unique identifier for the node (database ID as string) */
   id: string;
 
-  /** Display name of the trading instrument */
+  /** Display name of the trading instrument (shortened for display) */
   name: string;
+
+  /** Shortened name for node display on graph */
+  shortened_name?: string;
+
+  /** Full market question/name for detail view */
+  fullName?: string;
 
   /** Group classification (0-9) for visual clustering and filtering */
   group: string;
@@ -47,6 +53,12 @@ export interface GraphNode extends SimulationNodeDatum {
 
   /** Current prices for each outcome (parallel array to outcomes) */
   outcomePrices: string[];
+
+  /** Polymarket ID for API reference */
+  polymarketId?: string;
+
+  /** Database market ID for internal reference */
+  marketId?: number;
 }
 
 /**
@@ -82,6 +94,14 @@ export interface GraphConnection extends SimulationLinkDatum<GraphNode> {
    * - Indicates market activity/momentum
    */
   pressure: number;
+
+  /**
+   * Distance for D3 force simulation
+   * - Calculated from similarity (inverse relationship)
+   * - Lower value = nodes closer together
+   * - Higher value = nodes further apart
+   */
+  distance?: number;
 }
 
 /**

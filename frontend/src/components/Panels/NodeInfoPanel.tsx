@@ -153,8 +153,8 @@ function NodeDetailView({ node }: { node: GraphNode }) {
         paddingRight: "4px",
       }}
     >
-      {/* Name field */}
-      <FieldDisplay label="Name" value={node.name} />
+      {/* Name field - show full name in detail view */}
+      <FieldDisplay label="Name" value={node.fullName || node.name} />
 
       {/* Description field - only show if available */}
       {node.description && (
@@ -302,7 +302,7 @@ function NodeListView({
                   textOverflow: "ellipsis",
                 }}
               >
-                {node.name}
+                {node.shortened_name || node.name}
               </div>
             </div>
 
