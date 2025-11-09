@@ -13,13 +13,16 @@ class PolymarketAPI:
         logger.info(f"Initialized PolymarketAPI with base URL: {base_url}")
         logger.info(f"Rate limit delay: {rate_limit_delay}s between requests")
 
-    def get_active_markets(self) -> List[Dict[str, Any]]:
+    def get_active_markets(self, allowed_tags: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """
         Fetch all active markets from Polymarket by paginating through events.
+        Optionally filter by tags (e.g., ["Politics", "Economy"]).
         Returns a list of market dictionaries.
         """
         logger.info("=" * 80)
         logger.info("Starting Polymarket data retrieval process")
+        if allowed_tags:
+            logger.info(f"Filtering for tags: {', '.join(allowed_tags)}")
         logger.info("=" * 80)
         
         markets = []
@@ -27,6 +30,7 @@ class PolymarketAPI:
         limit = 100
         page = 1
         total_events_processed = 0
+        filtered_events_count = 0
         
         while True:
             try:
@@ -59,10 +63,33 @@ class PolymarketAPI:
                 
                 markets_before = len(markets)
                 for i, event in enumerate(events):
+                    # Get event tags
+                    event_tags = event.get("tags", [])
+                    event_tag_labels = [tag.get("label", "") for tag in event_tags]
+                    
+                    # Filter by tags if specified
+                    if allowed_tags:
+                        # Check if event has any of the allowed tags
+                        has_allowed_tag = any(tag in allowed_tags for tag in event_tag_labels)
+                        
+                        if not has_allowed_tag:
+                            filtered_events_count += 1
+                            logger.debug(f"  Skipping event '{event.get('title', 'N/A')}' - no matching tags (has: {event_tag_labels})")
+                            continue
+                    
+                    # Add event tags to each market
                     event_markets = event.get("markets", [])
-                    markets.extend(event_markets)
+                    for market in event_markets:
+                        # Inject event tags into market data
+                        market["event_tags"] = event_tag_labels
+                        markets.append(market)
+                    
                     if event_markets:
-                        logger.debug(f"  Event {i+1}/{num_events}: '{event.get('title', 'N/A')}' - {len(event_markets)} markets")
+                        event_tag_str = ""
+                        if allowed_tags:
+                            matching_tags = [tag for tag in event_tag_labels if tag in allowed_tags]
+                            event_tag_str = f" (tags: {', '.join(matching_tags)})"
+                        logger.debug(f"  Event {i+1}/{num_events}: '{event.get('title', 'N/A')}' - {len(event_markets)} markets{event_tag_str}")
                 
                 markets_added = len(markets) - markets_before
                 logger.info(f"Added {markets_added} markets from page {page} (total so far: {len(markets)})")
@@ -112,6 +139,9 @@ class PolymarketAPI:
         logger.info("=" * 80)
         logger.info(f"Polymarket data retrieval complete")
         logger.info(f"Total events processed: {total_events_processed}")
+        if allowed_tags:
+            logger.info(f"Events filtered out (no matching tags): {filtered_events_count}")
+            logger.info(f"Events included (with {', '.join(allowed_tags)} tags): {total_events_processed - filtered_events_count}")
         logger.info(f"Total markets found: {len(markets)}")
         logger.info("=" * 80)
         

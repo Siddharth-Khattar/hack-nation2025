@@ -1,6 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime
+from app.schemas.market_schema import Market
 
 class RelatedMarket(BaseModel):
     """Schema for a related market result"""
@@ -8,6 +9,8 @@ class RelatedMarket(BaseModel):
     similarity: float = Field(..., description="Similarity score (0.0-1.0)")
     correlation: float = Field(0.0, description="Correlation score")
     pressure: float = Field(0.0, description="Pressure score")
+    ai_correlation_score: Optional[float] = Field(None, description="AI-generated correlation score (0.0-1.0)")
+    ai_explanation: Optional[str] = Field(None, description="AI-generated explanation of relationship")
 
 class RelationSearchResponse(BaseModel):
     """Response for relation searches"""
@@ -40,3 +43,20 @@ class MarketRelationCreate(BaseModel):
 class MarketRelationBatchCreate(BaseModel):
     """Schema for batch creating market relations"""
     relations: List[MarketRelationCreate] = Field(..., description="List of relations to create")
+
+class EnrichedRelatedMarket(BaseModel):
+    """Schema for a related market with full market details"""
+    market_id: int = Field(..., description="Related market ID")
+    similarity: float = Field(..., description="Similarity score (0.0-1.0)")
+    correlation: float = Field(0.0, description="Correlation score")
+    pressure: float = Field(0.0, description="Pressure score")
+    market: Market = Field(..., description="Full market details")
+    ai_correlation_score: Optional[float] = Field(None, description="AI-generated correlation score (0.0-1.0)")
+    ai_explanation: Optional[str] = Field(None, description="AI-generated explanation of relationship")
+
+class EnrichedRelationResponse(BaseModel):
+    """Response for enriched relation searches with full market data"""
+    source_market_id: int = Field(..., description="The source market ID")
+    source_market: Optional[Market] = Field(None, description="Full source market details")
+    related_markets: List[EnrichedRelatedMarket] = Field(..., description="List of related markets with full details")
+    count: int = Field(..., description="Number of related markets found")

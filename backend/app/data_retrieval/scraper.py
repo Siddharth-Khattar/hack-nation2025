@@ -1,4 +1,5 @@
 import logging
+import os
 from .polymarket_api import PolymarketAPI
 from .supabase_client import SupabaseClient
 from .scrape_tracker import ScrapeTracker
@@ -44,11 +45,17 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
         should_run, reason = tracker.should_run_scrape(min_interval_minutes=55)
         
         if not should_run:
-            logger.warning(f"⏸️  SCRAPE SKIPPED: {reason}")
-            logger.info("=" * 80)
-            return
-        
-        logger.info(f"✓ Scrape approved: {reason}")
+            # Check if this is a manual run (via environment variable)
+            force_run = os.getenv("FORCE_SCRAPE", "false").lower() == "true"
+            if force_run:
+                logger.warning(f"⚠️  Rate limit check failed, but FORCE_SCRAPE=true, continuing anyway...")
+                logger.warning(f"   Reason for skip: {reason}")
+            else:
+                logger.warning(f"⏸️  SCRAPE SKIPPED: {reason}")
+                logger.info("=" * 80)
+                return
+        else:
+            logger.info(f"✓ Scrape approved: {reason}")
         
         # Start tracking this scrape
         scrape_id = tracker.start_scrape()
@@ -59,9 +66,11 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
         logger.info("\n🗄️  Step 3/7: Setting up database tables...")
         supabase.create_markets_table()
 
-        # Scrape active markets
+        # Scrape active markets (filtered by Politics and Economy tags)
         logger.info("\n📥 Step 4/7: Fetching markets from Polymarket API...")
-        active_markets = polymarket_api.get_active_markets()
+        logger.info("  Filters: Politics/Economy tags + Volume > $10,000")
+        allowed_tags = ["Politics", "Economy"]
+        active_markets = polymarket_api.get_active_markets(allowed_tags=allowed_tags)
         
         if not active_markets:
             logger.warning("⚠️  No active markets found!")
@@ -75,7 +84,22 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
         logger.info(f"Processing {markets_fetched} markets...")
         
         markets_to_import = []
-        skipped = 0
+        
+        # Detailed skip tracking
+        skip_reasons = {
+            'inactive': 0,
+            'low_volume': 0,
+            'missing_question': 0,
+            'validation_error': 0,
+            'parsing_error': 0
+        }
+        skip_examples = {
+            'inactive': [],
+            'low_volume': [],
+            'missing_question': [],
+            'validation_error': [],
+            'parsing_error': []
+        }
         
         for i, market in enumerate(active_markets, 1):
             try:
@@ -85,6 +109,10 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
                 # Get raw data from API
                 outcomes = market.get("outcomes", [])
                 outcome_prices = market.get("outcomePrices", [])
+                question = market.get("question", "")
+                
+                # Get tags for this market (injected by polymarket_api.get_active_markets)
+                tags = market.get("event_tags", [])
                 
                 # Ensure arrays are proper lists, not strings
                 if isinstance(outcomes, str):
@@ -101,14 +129,31 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
                 
                 # Skip inactive markets
                 if not market.get("active", True):
-                    skipped += 1
+                    skip_reasons['inactive'] += 1
+                    if len(skip_examples['inactive']) < 3:
+                        skip_examples['inactive'].append(f"'{question[:50]}...' (active={market.get('active')})")
+                    continue
+                
+                # Skip low volume markets (< 10,000)
+                volume = float(market.get("volume", 0)) if market.get("volume") else 0.0
+                if volume < 10000:
+                    skip_reasons['low_volume'] += 1
+                    if len(skip_examples['low_volume']) < 3:
+                        skip_examples['low_volume'].append(f"'{question[:50]}...' (volume=${volume:,.0f})")
+                    continue
+                
+                # Check for missing question BEFORE validation
+                if not question or question.strip() == "":
+                    skip_reasons['missing_question'] += 1
+                    if len(skip_examples['missing_question']) < 3:
+                        skip_examples['missing_question'].append(f"Market ID: {polymarket_id} (no question text)")
                     continue
                 
                 # Create market data using Pydantic schema for validation
                 try:
                     market_schema = MarketCreate(
                         polymarket_id=str(polymarket_id),
-                        question=market.get("question") or "",
+                        question=question,
                         description=market.get("description"),
                         outcomes=outcomes if isinstance(outcomes, list) else [],
                         outcome_prices=[str(p) for p in outcome_prices] if isinstance(outcome_prices, list) else [],
@@ -119,6 +164,7 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
                         one_day_price_change=market.get("oneDayPriceChange"),
                         one_week_price_change=market.get("oneWeekPriceChange"),
                         one_month_price_change=market.get("oneMonthPriceChange"),
+                        tags=tags if isinstance(tags, list) else [],
                     )
                     
                     # Convert validated schema to dict for database insertion
@@ -126,14 +172,9 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
                     market_data = market_schema.model_dump(mode='json')
                     
                 except Exception as validation_error:
-                    logger.warning(f"Skipping market {i}: Validation failed - {validation_error}")
-                    skipped += 1
-                    continue
-                
-                # Validate that essential fields are present
-                if not market_data["question"]:
-                    logger.warning(f"Skipping market {i}: Missing question")
-                    skipped += 1
+                    skip_reasons['validation_error'] += 1
+                    if len(skip_examples['validation_error']) < 3:
+                        skip_examples['validation_error'].append(f"'{question[:50]}...' - {str(validation_error)[:100]}")
                     continue
                     
                 markets_to_import.append(market_data)
@@ -142,19 +183,38 @@ def scrape_and_store_markets(supabase_url: str, supabase_api_key: str):
                     logger.info(f"Processed {i}/{len(active_markets)} markets...")
                     
             except Exception as e:
-                skipped += 1
-                logger.error(f"Error processing market {i}: {e}")
+                skip_reasons['parsing_error'] += 1
+                if len(skip_examples['parsing_error']) < 3:
+                    skip_examples['parsing_error'].append(f"Market {i} - {str(e)[:100]}")
                 logger.debug(f"Market data: {market}")
 
+        # Calculate total skipped
+        total_skipped = sum(skip_reasons.values())
+        
         logger.info(f"\n✅ Prepared {len(markets_to_import)} markets for import")
-        if skipped > 0:
-            logger.warning(f"⚠️  Skipped {skipped} markets due to errors or missing data")
+        
+        if total_skipped > 0:
+            logger.warning(f"\n⚠️  SKIPPED {total_skipped} markets - DETAILED BREAKDOWN:")
+            logger.warning("=" * 80)
+            
+            for reason, count in skip_reasons.items():
+                if count > 0:
+                    percentage = (count / markets_fetched * 100) if markets_fetched > 0 else 0
+                    logger.warning(f"  ❌ {reason.upper()}: {count} markets ({percentage:.1f}%)")
+                    
+                    # Show examples
+                    if skip_examples[reason]:
+                        logger.warning(f"     Examples:")
+                        for example in skip_examples[reason]:
+                            logger.warning(f"       - {example}")
+            
+            logger.warning("=" * 80)
 
         # Import data into Supabase
         if markets_to_import:
             supabase.import_markets(markets_to_import)
             markets_added = len(markets_to_import)
-            markets_failed = skipped
+            markets_failed = total_skipped
             
             # Calculate volatility for new/updated markets
             logger.info("\n📊 Step 6/7: Calculating volatility scores...")

@@ -6,8 +6,10 @@ from app.schemas.relation_schema import MarketRelation, MarketRelationCreate
 from app.schemas.market_schema import Market
 from app.services.database_service import get_database_service
 from app.services.vector_service import get_vector_service
+from app.utils.openai_service import get_openai_helper
 import logging
 import numpy as np
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -30,8 +32,10 @@ class RelationService:
         self,
         market_id: int,
         limit: int = 10,
-        min_similarity: float = 0.7
-    ) -> List[Tuple[int, float, float, float]]:
+        min_similarity: float = 0.7,
+        min_volume: Optional[float] = None,
+        include_ai_analysis: bool = False
+    ) -> List[Tuple[int, float, float, float, Optional[float], Optional[str]]]:
         """
         Get related markets from stored relations.
         
@@ -39,9 +43,11 @@ class RelationService:
             market_id: Source market ID
             limit: Maximum number of results
             min_similarity: Minimum similarity threshold
+            min_volume: Minimum market volume filter (optional)
+            include_ai_analysis: Include AI-generated correlation analysis (default: False)
             
         Returns:
-            List of (related_market_id, similarity, correlation, pressure) tuples
+            List of (related_market_id, similarity, correlation, pressure, ai_score, ai_explanation) tuples
         """
         try:
             # Query relations where this market is involved
@@ -50,28 +56,217 @@ class RelationService:
                 .or_(f"market_id_1.eq.{market_id},market_id_2.eq.{market_id}")\
                 .gte('similarity', min_similarity)\
                 .order('similarity', desc=True)\
-                .limit(limit)\
+                .limit(limit * 3)\
                 .execute()
             
-            results = []
+            # Extract all related market IDs
+            basic_results = []
             for relation in response.data:
-                # Return the OTHER market ID
                 related_id = (
                     relation['market_id_2'] 
                     if relation['market_id_1'] == market_id 
                     else relation['market_id_1']
                 )
-                results.append((
+                basic_results.append((
                     related_id,
                     float(relation['similarity']),
                     float(relation.get('correlation', 0.0)),
                     float(relation.get('pressure', 0.0))
                 ))
             
-            return results
+            # If no filtering or AI needed, return immediately
+            if min_volume is None and not include_ai_analysis:
+                return [(mid, sim, corr, press, None, None) for mid, sim, corr, press in basic_results[:limit]]
+            
+            # Fetch ALL markets in a SINGLE batch request (MUCH FASTER!)
+            market_ids_to_fetch = [mid for mid, _, _, _ in basic_results]
+            markets = await self.db.batch_get_markets_by_ids(market_ids_to_fetch)
+            
+            # Build market cache
+            market_cache = {market.id: market for market in markets}
+            
+            # Apply volume filter if needed
+            results = []
+            for related_id, similarity, correlation, pressure in basic_results:
+                if min_volume is not None:
+                    market = market_cache.get(related_id)
+                    if not market or (market.volume or 0.0) < min_volume:
+                        continue
+                
+                results.append((related_id, similarity, correlation, pressure))
+                
+                # Stop if we have enough results
+                if len(results) >= limit:
+                    break
+            
+            # If no AI analysis needed, return quickly
+            if not include_ai_analysis:
+                return [(mid, sim, corr, press, None, None) for mid, sim, corr, press in results]
+            
+            # AI analysis enabled - process in parallel
+            logger.info(f"Performing AI analysis for {len(results)} markets in parallel...")
+            
+            # Get source market for AI analysis
+            source_market = await self.db.get_market_by_id(market_id)
+            if not source_market:
+                return [(mid, sim, corr, press, None, None) for mid, sim, corr, press in results]
+            
+            async def analyze_one(related_id, similarity, correlation, pressure):
+                market = market_cache.get(related_id)
+                if not market:
+                    market = await self.db.get_market_by_id(related_id)
+                
+                if not market:
+                    return (related_id, similarity, correlation, pressure, None, None)
+                
+                try:
+                    openai_helper = get_openai_helper()
+                    analysis = await openai_helper.analyze_market_correlation(
+                        market1_question=source_market.question,
+                        market1_description=source_market.description,
+                        market2_question=market.question,
+                        market2_description=market.description
+                    )
+                    return (related_id, similarity, correlation, pressure, analysis.correlation_score, analysis.explanation)
+                except Exception as e:
+                    logger.warning(f"Failed AI analysis for market {related_id}: {e}")
+                    return (related_id, similarity, correlation, pressure, None, None)
+            
+            # Process all in parallel
+            analysis_tasks = [analyze_one(mid, sim, corr, press) for mid, sim, corr, press in results]
+            results_with_ai = await asyncio.gather(*analysis_tasks)
+            
+            logger.info(f"✓ Completed AI analysis for {len(results_with_ai)} markets")
+            return results_with_ai
             
         except Exception as e:
             logger.error(f"Error getting related markets: {e}")
+            raise
+    
+    async def get_related_markets_enriched(
+        self,
+        market_id: int,
+        limit: int = 10,
+        min_similarity: float = 0.7,
+        min_volume: Optional[float] = None,
+        include_source: bool = True,
+        include_ai_analysis: bool = False
+    ) -> dict:
+        """
+        Get related markets from stored relations with full market details and optional AI correlation analysis.
+        
+        Args:
+            market_id: Source market ID
+            limit: Maximum number of results
+            min_similarity: Minimum similarity threshold
+            min_volume: Minimum market volume filter (optional)
+            include_source: Whether to include source market details (default: True)
+            include_ai_analysis: Whether to include AI-generated correlation analysis (default: False for speed)
+            
+        Returns:
+            Dictionary with:
+            - source_market: Market object (if include_source=True, else None)
+            - related_markets: List of (related_market_id, similarity, correlation, pressure, market_object, ai_score, ai_explanation) tuples
+        """
+        try:
+            # Get source market if requested
+            source_market = None
+            if include_source:
+                source_market = await self.db.get_market_by_id(market_id)
+                if not source_market:
+                    raise ValueError(f"Source market {market_id} not found")
+            
+            # Get basic relations (without AI analysis - we'll do that separately)
+            basic_results = await self.get_related_markets(
+                market_id=market_id,
+                limit=limit,
+                min_similarity=min_similarity,
+                min_volume=min_volume,
+                include_ai_analysis=False  # We'll handle AI separately with full market objects
+            )
+            
+            # Fetch all market details in a SINGLE batch request (MUCH FASTER!)
+            # Extract just the first 4 values (id, sim, corr, press) ignoring AI fields
+            market_ids_to_fetch = [related_id for related_id, _, _, _, _, _ in basic_results]
+            markets = await self.db.batch_get_markets_by_ids(market_ids_to_fetch)
+            
+            # Build market lookup
+            market_lookup = {market.id: market for market in markets}
+            
+            # If AI analysis is NOT needed, return quickly
+            if not include_ai_analysis:
+                enriched_results = []
+                for related_id, similarity, correlation, pressure, _, _ in basic_results:
+                    market = market_lookup.get(related_id)
+                    if market:
+                        enriched_results.append((
+                            related_id,
+                            similarity,
+                            correlation,
+                            pressure,
+                            market,
+                            None,  # ai_correlation_score
+                            None   # ai_explanation
+                        ))
+                
+                return {
+                    "source_market": source_market,
+                    "related_markets": enriched_results
+                }
+            
+            # AI analysis enabled - process in parallel with rate limiting
+            logger.info(f"Performing AI analysis for {len(basic_results)} markets in parallel...")
+            
+            async def analyze_one_market(related_id, similarity, correlation, pressure):
+                market = market_lookup.get(related_id)
+                if not market:
+                    return None
+                
+                ai_correlation_score = None
+                ai_explanation = None
+                
+                if source_market:
+                    try:
+                        openai_helper = get_openai_helper()
+                        analysis = await openai_helper.analyze_market_correlation(
+                            market1_question=source_market.question,
+                            market1_description=source_market.description,
+                            market2_question=market.question,
+                            market2_description=market.description
+                        )
+                        ai_correlation_score = analysis.correlation_score
+                        ai_explanation = analysis.explanation
+                    except Exception as e:
+                        logger.warning(f"Failed AI analysis for market {related_id}: {e}")
+                
+                return (
+                    related_id,
+                    similarity,
+                    correlation,
+                    pressure,
+                    market,
+                    ai_correlation_score,
+                    ai_explanation
+                )
+            
+            # Process all AI analyses in parallel (MUCH FASTER!)
+            analysis_tasks = [
+                analyze_one_market(related_id, similarity, correlation, pressure)
+                for related_id, similarity, correlation, pressure, _, _ in basic_results
+            ]
+            
+            results_with_ai = await asyncio.gather(*analysis_tasks)
+            enriched_results = [r for r in results_with_ai if r is not None]
+            
+            logger.info(f"✓ Completed AI analysis for {len(enriched_results)} markets")
+            
+            return {
+                "source_market": source_market,
+                "related_markets": enriched_results
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting enriched related markets: {e}")
             raise
     
     async def get_relation_between(
@@ -256,82 +451,75 @@ class RelationService:
         Returns:
             Correlation score (0.0-1.0)
         """
-        # If either market doesn't have outcome prices, return 0
-        if not market1.outcome_prices or not market2.outcome_prices:
-            return 0.0
-        
-        try:
-            # Convert price strings to floats
-            prices1 = [float(p) for p in market1.outcome_prices if p]
-            prices2 = [float(p) for p in market2.outcome_prices if p]
-            
-            # Need at least 2 prices to calculate correlation
-            if len(prices1) < 2 or len(prices2) < 2:
-                return 0.0
-            
-            # Normalize prices to 0-1 range if needed
-            # Take the first outcome price as a proxy for market sentiment
-            # For binary markets, use the "Yes" outcome price
-            price1 = prices1[0] if prices1 else 0.0
-            price2 = prices2[0] if prices2 else 0.0
-            
-            # Simple correlation: how similar are the prices?
-            # If both markets are bullish (high prices) or bearish (low prices), correlation is high
-            price_diff = abs(price1 - price2)
-            correlation = 1.0 - min(price_diff, 1.0)  # Inverse of price difference
-            
-            return max(0.0, min(1.0, correlation))
-            
-        except (ValueError, IndexError) as e:
-            logger.debug(f"Error calculating correlation: {e}")
-            return 0.0
+        return 1.0 # TODO: Implement correlation calculation
     
     def calculate_pressure(
         self,
         similarity: float,
         correlation: float,
-        volume1: float,
-        volume2: float
+        market1: Market,
+        market2: Market
     ) -> float:
         """
-        Calculate pressure score based on similarity, correlation, and volumes.
+        Calculate pressure score based on similarity, correlation, and volatility difference.
         
         Pressure represents the "strength" or "intensity" of the relationship.
-        Higher pressure = stronger relationship.
-        
-        Formula: pressure = similarity * correlation * volume_factor
+        Higher volatility difference = higher pressure (more dynamic relationship).
         
         Args:
             similarity: Similarity score (0.0-1.0)
             correlation: Correlation score (0.0-1.0)
-            volume1: Volume of first market
-            volume2: Volume of second market
+            market1: First market object
+            market2: Second market object
             
         Returns:
             Pressure score (0.0-1.0)
         """
-        # Normalize volumes (log scale to handle large differences)
-        # Use average volume as a proxy
-        avg_volume = (volume1 + volume2) / 2.0
+        volatility1 = self._calculate_volatility_from_price_changes(market1)
+        volatility2 = self._calculate_volatility_from_price_changes(market2)
         
-        # Normalize volume to 0-1 range using log scale
-        # Assuming max volume is around 1M, adjust as needed
-        if avg_volume <= 0:
-            volume_factor = 0.1  # Minimum factor for zero volume
+        volatility_diff = abs(volatility1 - volatility2)
+        
+        if volatility_diff <= 0:
+            pressure_factor = 0.1
         else:
-            # Log normalization: log(1 + volume) / log(1 + max_volume)
-            # Using 1M as max volume reference
-            max_volume_ref = 1_000_000.0
-            volume_factor = min(1.0, np.log1p(avg_volume) / np.log1p(max_volume_ref))
-            # Ensure minimum of 0.1 to avoid zero pressure
-            volume_factor = max(0.1, volume_factor)
+            pressure_factor = min(1.0, np.sqrt(volatility_diff))
+            pressure_factor = max(0.1, pressure_factor)
         
-        # Pressure = similarity * correlation * volume_factor
-        # This ensures pressure is high only when all factors are high
-        pressure = similarity * correlation * volume_factor
+        pressure = similarity * correlation * pressure_factor
         
-        # Normalize to 0-1 range
         return max(0.0, min(1.0, pressure))
+    
+    def _calculate_volatility_from_price_changes(self, market: Market) -> float:
+        """
+        Calculate volatility from price change data.
+        
+        Uses the average of absolute price changes as a measure of volatility.
+        
+        Args:
+            market: Market object with price change data
+            
+        Returns:
+            Volatility score (0.0+, typically 0-1 range)
+        """
+        price_changes = []
+        
+        # Collect all available price changes (as absolute values)
+        if market.one_day_price_change is not None:
+            price_changes.append(abs(market.one_day_price_change))
+        
+        if market.one_week_price_change is not None:
+            price_changes.append(abs(market.one_week_price_change))
+        
+        if market.one_month_price_change is not None:
+            price_changes.append(abs(market.one_month_price_change))
+        
+        # If no price change data, return 0
+        if not price_changes:
+            return 0.0
+        
+        # Return average of absolute price changes as volatility
+        return sum(price_changes) / len(price_changes)
     
     # ==================== RELATION DISCOVERY METHODS ====================
     
@@ -436,8 +624,8 @@ class RelationService:
                 pressure = self.calculate_pressure(
                     similarity=similarity,
                     correlation=correlation,
-                    volume1=market.volume or 0.0,
-                    volume2=similar_market.volume or 0.0
+                    market1=market,
+                    market2=similar_market
                 )
                 
                 # Create relation

@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: hacknation-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_API_KEY=${SUPABASE_API_KEY}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - SCRAPE_INTERVAL_HOURS=${SCRAPE_INTERVAL_HOURS:-1}
+    env_file:
+      - .env
+    volumes:
+      # Mount logs directory for persistence
+      - ./logs:/app/logs
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+

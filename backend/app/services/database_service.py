@@ -418,21 +418,47 @@ class DatabaseService:
             logger.error(f"Error getting embeddings: {e}")
             raise
     
-    async def get_all_embedding_market_ids(self, limit: int = 100000) -> List[int]:
+    async def get_embedding_market_ids(self, limit: int = 100000) -> List[int]:
         """
-        Get only the market IDs of stored embeddings (much faster than fetching full embeddings).
-        Use this to check which markets already have embeddings without downloading the vectors.
+        Get only market IDs that have embeddings (much faster, no embedding vectors).
+        Uses pagination to handle large datasets.
         
         Args:
-            limit: Maximum number of IDs to fetch (default: 100000)
+            limit: Maximum number of market IDs to return
             
         Returns:
             List of market IDs that have embeddings
         """
         try:
-            # Only select market_id column - MUCH faster!
-            response = self.client.table('vector_embeddings').select('market_id').limit(limit).execute()
-            return [item['market_id'] for item in response.data]
+            market_ids = []
+            page_size = 1000  # Fetch in smaller batches
+            offset = 0
+            
+            while len(market_ids) < limit:
+                # Only select market_id field (no embedding vectors)
+                response = self.client.table('vector_embeddings')\
+                    .select('market_id')\
+                    .range(offset, offset + page_size - 1)\
+                    .execute()
+                
+                if not response.data:
+                    break
+                
+                batch_ids = [row['market_id'] for row in response.data]
+                market_ids.extend(batch_ids)
+                
+                # If we got fewer results than requested, we've reached the end
+                if len(batch_ids) < page_size:
+                    break
+                
+                offset += page_size
+                
+                # Stop if we've reached the limit
+                if len(market_ids) >= limit:
+                    break
+            
+            return market_ids[:limit]
+            
         except Exception as e:
             logger.error(f"Error getting embedding market IDs: {e}")
             raise

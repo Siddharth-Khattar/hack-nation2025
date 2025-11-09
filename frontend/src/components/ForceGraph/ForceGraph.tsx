@@ -7,7 +7,7 @@ import { useCallback, useState, useRef, useEffect } from "react";
 import { select } from "d3-selection";
 import type { Simulation } from "d3-force";
 import { type ZoomTransform, zoomIdentity } from "d3-zoom";
-import type { GraphData, GraphNode, GraphConnection } from "@/types/graph";
+import type { GraphData, GraphNode, GraphConnection, ClusterController } from "@/types/graph";
 import { useForceSimulation } from "@/hooks/useForceSimulation";
 import { createDragBehaviorWithClick } from "@/hooks/useDrag";
 import { createZoomBehavior, type ZoomController } from "@/hooks/useZoom";
@@ -23,6 +23,7 @@ import {
 interface ForceGraphProps {
   data: GraphData;
   onZoomControllerCreated?: (controller: ZoomController) => void;
+  onClusterControllerCreated?: (controller: ClusterController) => void;
 }
 
 /**
@@ -37,7 +38,7 @@ interface ForceGraphProps {
  *
  * @param props - Graph data
  */
-export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
+export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerCreated }: ForceGraphProps) {
   // Create a stable mutable copy of the data ONCE using useState with lazy initialization
   // D3 will mutate these objects in place (adding x, y, vx, vy properties)
   // We must use the same object references for both simulation and rendering
@@ -151,6 +152,42 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
     },
     [dimensions.width, dimensions.height]
   );
+
+  // Programmatically select a node by ID (for external controls like search)
+  // This does NOT toggle - it always selects the node
+  const selectNodeById = useCallback(
+    (nodeId: string) => {
+      // Find the node
+      const node = mutableData.nodes.find((n) => n.id === nodeId);
+      if (!node) {
+        return;
+      }
+
+      // Update the selection state
+      selectNode(nodeId);
+
+      // Compute cluster nodes
+      const neighbors = adjacencyMap.get(nodeId) || new Set<string>();
+      const clusterNodeIds = new Set([nodeId, ...neighbors]);
+      const clusterNodes = mutableData.nodes.filter(n =>
+        clusterNodeIds.has(n.id) && n.x !== undefined && n.y !== undefined
+      );
+
+      // Zoom to the cluster
+      if (clusterNodes.length > 0) {
+        zoomToCluster(clusterNodes, 500);
+      }
+    },
+    [selectNode, adjacencyMap, mutableData.nodes, zoomToCluster]
+  );
+
+  // Clear selection and reset zoom (for external controls)
+  const clearSelectionAndZoom = useCallback(() => {
+    clearSelection();
+    if (zoomControllerRef.current) {
+      zoomControllerRef.current.resetZoom();
+    }
+  }, [clearSelection]);
 
   // Handle node click for cluster selection
   const handleNodeClick = useCallback(
@@ -297,6 +334,20 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
       }
     }
   }, [dimensions.width, dimensions.height, onZoomControllerCreated]);
+
+  // Expose cluster controller to parent component
+  // This allows external components (like SearchBar, NodeInfoPanel) to programmatically select nodes
+  useEffect(() => {
+    if (onClusterControllerCreated) {
+      const clusterController: ClusterController = {
+        selectNode: selectNodeById,
+        clearSelection: clearSelectionAndZoom,
+        getSelectedNodeId: () => clusterState.selectedNodeId,
+      };
+
+      onClusterControllerCreated(clusterController);
+    }
+  }, [selectNodeById, clearSelectionAndZoom, clusterState.selectedNodeId, onClusterControllerCreated]);
 
   const connectionColor = getConnectionColor();
 
