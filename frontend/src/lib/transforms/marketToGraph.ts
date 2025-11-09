@@ -46,17 +46,6 @@ function calculateVolatility(
 }
 
 /**
- * Truncate text to specified length with ellipsis
- * @param text - Text to truncate
- * @param maxLength - Maximum length (default 50)
- * @returns Truncated text
- */
-function truncateText(text: string, maxLength: number = 50): string {
-  if (text.length <= maxLength) return text;
-  return text.substring(0, maxLength - 3) + '...';
-}
-
-/**
  * Assign group based on market properties
  * @param market - Market object
  * @returns Group number as string (0-9)
@@ -98,7 +87,7 @@ function assignGroup(market: Market): string {
 export function transformMarketToNode(market: Market): GraphNode {
   return {
     id: market.id.toString(),
-    name: truncateText(market.question, 50),
+    name: market.question,
     group: assignGroup(market),
     volatility: calculateVolatility(
       market.one_day_price_change,
@@ -107,6 +96,10 @@ export function transformMarketToNode(market: Market): GraphNode {
     ),
     lastUpdate: market.updated_at,
     ...(market.description && { description: market.description }),
+    tags: market.tags || [],
+    volume: market.volume,
+    outcomes: market.outcomes,
+    outcomePrices: market.outcome_prices,
   };
 }
 

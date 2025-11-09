@@ -35,6 +35,18 @@ export interface GraphNode extends SimulationNodeDatum {
 
   /** Optional detailed description of the market/node */
   description?: string;
+
+  /** Tags/categories associated with the market/node */
+  tags: string[];
+
+  /** Market volume in dollars */
+  volume: number;
+
+  /** Possible outcomes for this market (e.g., ["Yes", "No"]) */
+  outcomes: string[];
+
+  /** Current prices for each outcome (parallel array to outcomes) */
+  outcomePrices: string[];
 }
 
 /**
@@ -181,7 +193,16 @@ export function isGraphNode(obj: unknown): obj is GraphNode {
     node.volatility >= 0 &&
     node.volatility <= 1 &&
     typeof node.lastUpdate === "string" &&
-    (node.description === undefined || typeof node.description === "string")
+    (node.description === undefined || typeof node.description === "string") &&
+    Array.isArray(node.tags) &&
+    node.tags.every((tag) => typeof tag === "string") &&
+    typeof node.volume === "number" &&
+    node.volume >= 0 &&
+    Array.isArray(node.outcomes) &&
+    node.outcomes.every((outcome) => typeof outcome === "string") &&
+    Array.isArray(node.outcomePrices) &&
+    node.outcomePrices.every((price) => typeof price === "string") &&
+    node.outcomes.length === node.outcomePrices.length
   );
 }
 
