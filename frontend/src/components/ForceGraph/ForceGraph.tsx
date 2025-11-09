@@ -94,8 +94,6 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
   // Callback to capture simulation instance when created
   const handleSimulationCreated = useCallback(
     (sim: Simulation<GraphNode, GraphConnection>) => {
-      console.log("[DEBUG] handleSimulationCreated called");
-      console.log("[DEBUG] Simulation instance:", sim);
       setCurrentSimulation(sim);
     },
     []
@@ -103,9 +101,7 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
 
   // Zoom to cluster functionality
   const zoomToCluster = useCallback(
-    (clusterNodes: GraphNode[]) => {
-      console.log("[DEBUG] Zooming to cluster with", clusterNodes.length, "nodes");
-
+    (clusterNodes: GraphNode[], duration = 500) => {
       if (!zoomControllerRef.current || clusterNodes.length === 0) {
         return;
       }
@@ -116,7 +112,6 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
       );
 
       if (validNodes.length === 0) {
-        console.warn("[DEBUG] No nodes with valid positions in cluster");
         return;
       }
 
@@ -151,15 +146,8 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
         .translate(translateX, translateY)
         .scale(scale);
 
-      console.log("[DEBUG] Applying zoom transform:", {
-        scale,
-        translateX,
-        translateY,
-        clusterBounds: { minX, maxX, minY, maxY },
-      });
-
       // Apply transform with animation using the zoom controller
-      zoomControllerRef.current.applyTransform(newTransform, 500);
+      zoomControllerRef.current.applyTransform(newTransform, duration);
     },
     [dimensions.width, dimensions.height]
   );
@@ -167,18 +155,17 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
   // Handle node click for cluster selection
   const handleNodeClick = useCallback(
     (node: GraphNode) => {
-      console.log("[DEBUG] Node clicked:", node.id);
-
       // Check if clicking the same node (to toggle off)
       if (clusterState.selectedNodeId === node.id) {
-        console.log("[DEBUG] Clicking same node - clearing selection");
         clearSelection();
         // Reset zoom when deselecting
         if (zoomControllerRef.current) {
           zoomControllerRef.current.resetZoom();
         }
       } else {
-        console.log("[DEBUG] Selecting new node:", node.id);
+        // Determine if this is switching between clusters or selecting first cluster
+        const isSwitch = clusterState.selectedNodeId !== null;
+
         // Update the selection state
         selectNode(node.id);
 
@@ -190,14 +177,12 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
           clusterNodeIds.has(n.id) && n.x !== undefined && n.y !== undefined
         );
 
-        console.log("[DEBUG] Computed cluster nodes:", clusterNodes.length, "nodes");
-
-        // Zoom to the cluster immediately
+        // Zoom to the cluster
         if (clusterNodes.length > 0) {
-          // Use requestAnimationFrame to ensure DOM has updated
-          requestAnimationFrame(() => {
-            zoomToCluster(clusterNodes);
-          });
+          // Use faster zoom when switching between clusters to reduce visual discontinuity
+          // Use normal speed for first selection
+          const zoomDuration = isSwitch ? 200 : 500;
+          zoomToCluster(clusterNodes, zoomDuration);
         }
       }
     },
@@ -214,7 +199,6 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
         target.closest('.connections') ||
         target.tagName === 'svg'
       ) {
-        console.log("[DEBUG] SVG background clicked, clearing selection and resetting zoom");
         clearSelection();
         // Reset zoom to show full graph when clearing selection
         if (zoomControllerRef.current) {
@@ -259,14 +243,7 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
   // Apply drag behavior to nodes AFTER they are rendered in the DOM
   // This effect runs after the nodes are painted to the screen
   useEffect(() => {
-    console.log("[DEBUG] Drag application effect triggered", {
-      hasSimulation: !!currentSimulation,
-      hasSvg: !!svgRef.current,
-      nodesCount: mutableData.nodes.length
-    });
-
     if (!currentSimulation || !svgRef.current) {
-      console.log("[DEBUG] Cannot apply drag - missing simulation or SVG ref");
       return;
     }
 
@@ -275,57 +252,32 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
       onNodeClick: handleNodeClick,
       clickThreshold: 5,
     });
-    console.log("[DEBUG] Drag behavior with click detection created:", dragBehavior);
 
     if (!dragBehavior) {
-      console.warn("[DEBUG] Failed to create drag behavior");
       return;
     }
 
     const svg = select(svgRef.current);
     const nodeCircles = svg.selectAll<SVGCircleElement, GraphNode>(".node-circle");
 
-    console.log("[DEBUG] Selecting .node-circle elements");
-    console.log("[DEBUG] Found", nodeCircles.size(), "node circles");
-    console.log("[DEBUG] Node circle DOM elements:", nodeCircles.nodes());
-
     if (nodeCircles.size() === 0) {
-      console.warn("[DEBUG] No .node-circle elements found in DOM!");
-      // Debug: Let's see what elements ARE in the SVG
-      console.log("[DEBUG] All SVG children:", svgRef.current.querySelectorAll("*"));
       return;
     }
 
     // CRITICAL: Bind node data to circle elements so drag handlers receive the data
     // React renders circles in mutableData.nodes order, so we bind the same array by index
-    console.log("[DEBUG] Binding data to", mutableData.nodes.length, "nodes");
     nodeCircles.data(mutableData.nodes);
-    console.log("[DEBUG] Data bound successfully");
-
     nodeCircles.call(dragBehavior);
-    console.log("[DEBUG] ✅ Drag behavior successfully applied to", nodeCircles.size(), "nodes");
   }, [currentSimulation, mutableData.nodes, handleNodeClick]);
 
   // Apply zoom behavior to SVG AFTER dimensions are measured
   // This effect runs after the SVG is rendered with proper dimensions
   useEffect(() => {
-    console.log("[DEBUG] Zoom application effect triggered", {
-      hasSvg: !!svgRef.current,
-      hasTransformGroup: !!transformGroupRef.current,
-      width: dimensions.width,
-      height: dimensions.height,
-    });
-
     if (!svgRef.current || !transformGroupRef.current || dimensions.width === 0 || dimensions.height === 0) {
-      console.log("[DEBUG] Cannot apply zoom - missing SVG ref, transform group ref, or dimensions");
       return;
     }
 
     const handleTransformChange = (transform: ZoomTransform) => {
-      console.log("[DEBUG] Zoom transform changed:", {
-        scale: transform.k,
-        translate: [transform.x, transform.y],
-      });
       setZoomTransform(transform);
     };
 
@@ -336,19 +288,14 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
       dimensions.height
     );
 
-    console.log("[DEBUG] Zoom behavior created:", zoomController);
-
     // Store zoom controller reference
     if (zoomController) {
       zoomControllerRef.current = zoomController;
 
       if (onZoomControllerCreated) {
-        console.log("[DEBUG] Notifying parent of zoom controller");
         onZoomControllerCreated(zoomController);
       }
     }
-
-    console.log("[DEBUG] ✅ Zoom behavior successfully applied");
   }, [dimensions.width, dimensions.height, onZoomControllerCreated]);
 
   const connectionColor = getConnectionColor();
@@ -444,11 +391,6 @@ export function ForceGraph({ data, onZoomControllerCreated }: ForceGraphProps) {
             const nodeOpacity = getNodeOpacity(node.id);
             const nodeScale = getNodeScale(node.id);
             const nodeRadius = baseRadius * nodeScale;
-
-            // Debug logging for first 5 nodes to verify radius calculation
-            if (nodeIndex < 5) {
-              console.log(`[DEBUG Node ${node.id}] volatility: ${node.volatility.toFixed(3)}, radius: ${nodeRadius.toFixed(2)}px, scale: ${nodeScale}`);
-            }
 
             return (
               <g

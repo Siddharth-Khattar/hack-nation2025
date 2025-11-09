@@ -51,10 +51,9 @@ export function createDragBehaviorWithClick({
   onNodeClick,
   clickThreshold = 5
 }: DragBehaviorOptions) {
-  console.log("[DEBUG useDrag] createDragBehaviorWithClick called with simulation:", simulation);
 
   if (!simulation) {
-    console.warn("[DEBUG useDrag] No simulation provided, returning null");
+
     return null;
   }
 
@@ -70,7 +69,6 @@ export function createDragBehaviorWithClick({
     event: D3DragEvent<SVGCircleElement, GraphNode, GraphNode>,
     d: GraphNode
   ) {
-    console.log("[DEBUG useDrag] dragStarted - node:", d.id, "event.active:", event.active);
 
     // Store starting position for click detection
     dragStartX = event.x;
@@ -80,14 +78,14 @@ export function createDragBehaviorWithClick({
     // event.active tracks the number of concurrent drag operations
     if (!event.active && simulation) {
       simulation.alphaTarget(0.3).restart();
-      console.log("[DEBUG useDrag] Simulation reheated");
+
     }
 
     // Fix the node position at its current location
     // fx and fy are D3's fixed position properties
     d.fx = d.x;
     d.fy = d.y;
-    console.log("[DEBUG useDrag] Node position fixed at:", d.fx, d.fy);
+
   }
 
   /**
@@ -98,7 +96,6 @@ export function createDragBehaviorWithClick({
     event: D3DragEvent<SVGCircleElement, GraphNode, GraphNode>,
     d: GraphNode
   ) {
-    console.log("[DEBUG useDrag] dragged - node:", d.id, "to position:", event.x, event.y);
 
     // Update fixed position to cursor coordinates
     // The simulation will use these values instead of calculating new positions
@@ -115,7 +112,6 @@ export function createDragBehaviorWithClick({
     event: D3DragEvent<SVGCircleElement, GraphNode, GraphNode>,
     d: GraphNode
   ) {
-    console.log("[DEBUG useDrag] dragEnded - node:", d.id, "event.active:", event.active);
 
     // Calculate drag distance for click detection
     if (dragStartX !== null && dragStartY !== null) {
@@ -124,11 +120,9 @@ export function createDragBehaviorWithClick({
         Math.pow(event.y - dragStartY, 2)
       );
 
-      console.log("[DEBUG useDrag] Drag distance:", dragDistance, "threshold:", clickThreshold);
-
       // If distance is below threshold, treat as click
       if (dragDistance < clickThreshold && onNodeClick) {
-        console.log("[DEBUG useDrag] Detected click on node:", d.id);
+
         onNodeClick(d);
       }
     }
@@ -140,14 +134,14 @@ export function createDragBehaviorWithClick({
     // Cool down simulation when no more active drags
     if (!event.active && simulation) {
       simulation.alphaTarget(0);
-      console.log("[DEBUG useDrag] Simulation cooled down");
+
     }
 
     // Release the fixed position - node will now respond to forces again
     // Set to null (not undefined) to remove the constraint
     d.fx = null;
     d.fy = null;
-    console.log("[DEBUG useDrag] Node position released");
+
   }
 
   // Create and return the drag behavior with typed event handlers

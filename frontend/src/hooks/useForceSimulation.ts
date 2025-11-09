@@ -49,24 +49,14 @@ export function useForceSimulation({
   );
 
   useEffect(() => {
-    console.log("[DEBUG useForceSimulation] Effect triggered", {
-      nodesCount: nodes.length,
-      width,
-      height
-    });
-
     // Skip if no data provided
     if (nodes.length === 0) {
-      console.log("[DEBUG useForceSimulation] No nodes, skipping");
       return;
     }
 
     if (width === 0 || height === 0) {
-      console.log("[DEBUG useForceSimulation] No dimensions, skipping");
       return;
     }
-
-    console.log("[DEBUG useForceSimulation] Creating simulation...");
 
     // D3 force simulation is designed to mutate nodes in-place, adding x, y, vx, vy properties.
     // The caller (ForceGraph) is responsible for providing mutable copies of the data.
@@ -110,14 +100,10 @@ export function useForceSimulation({
     // Store simulation reference for external access
     simulationRef.current = simulation;
 
-    console.log("[DEBUG useForceSimulation] Simulation created successfully");
-
     // Notify callback that simulation is ready
     if (onSimulationCreated) {
-      console.log("[DEBUG useForceSimulation] Calling onSimulationCreated callback");
       onSimulationCreated(simulation);
     } else {
-      console.warn("[DEBUG useForceSimulation] No onSimulationCreated callback provided");
     }
 
     // Cleanup function: stop simulation when component unmounts or dependencies change
@@ -128,10 +114,7 @@ export function useForceSimulation({
   }, [nodes, connections, width, height, onTick, onSimulationCreated]);
 
   // Return a stable getter function for accessing the simulation
-  const getSimulation = useCallback(
-    () => simulationRef.current,
-    []
-  );
+  const getSimulation = useCallback(() => simulationRef.current, []);
 
   return getSimulation;
 }
