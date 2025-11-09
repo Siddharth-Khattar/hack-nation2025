@@ -130,6 +130,27 @@ export interface ClusterData {
 }
 
 /**
+ * Controller interface for programmatic cluster selection and management.
+ * Provides methods to select nodes and clear selections from external components
+ * (e.g., search bar, node list).
+ */
+export interface ClusterController {
+  /**
+   * Programmatically select a node by its ID and zoom to its cluster.
+   * If the node is already selected, it will remain selected and re-zoom to it.
+   *
+   * @param nodeId - The ID of the node to select
+   */
+  selectNode: (nodeId: string) => void;
+
+  /**
+   * Clear the current cluster selection and reset the graph zoom.
+   * Returns the graph to its default unselected state.
+   */
+  clearSelection: () => void;
+}
+
+/**
  * Type guard to check if an object is a valid GraphNode.
  * Useful for runtime validation of data from external sources.
  *

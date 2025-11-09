@@ -16,6 +16,7 @@ class MarketBase(BaseModel):
     one_day_price_change: Optional[float] = Field(None, description="24h price change")
     one_week_price_change: Optional[float] = Field(None, description="7-day price change")
     one_month_price_change: Optional[float] = Field(None, description="30-day price change")
+    tags: List[str] = Field(default_factory=list, description="Event tags (e.g., Politics, Economy)")
 
 class MarketCreate(MarketBase):
     """Schema for creating a market"""
