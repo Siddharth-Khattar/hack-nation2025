@@ -153,6 +153,11 @@ function NodeDetailView({ node }: { node: GraphNode }) {
       {/* Name field */}
       <FieldDisplay label="Name" value={node.name} />
 
+      {/* Description field - only show if available */}
+      {node.description && (
+        <FieldDisplay label="Description" value={node.description} />
+      )}
+
       {/* ID field */}
       <FieldDisplay label="ID" value={node.id} />
 

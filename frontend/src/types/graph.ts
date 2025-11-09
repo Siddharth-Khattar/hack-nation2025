@@ -32,6 +32,9 @@ export interface GraphNode extends SimulationNodeDatum {
 
   /** Timestamp of last data update in ISO 8601 format */
   lastUpdate: string;
+
+  /** Optional detailed description of the market/node */
+  description?: string;
 }
 
 /**
@@ -177,7 +180,8 @@ export function isGraphNode(obj: unknown): obj is GraphNode {
     typeof node.volatility === "number" &&
     node.volatility >= 0 &&
     node.volatility <= 1 &&
-    typeof node.lastUpdate === "string"
+    typeof node.lastUpdate === "string" &&
+    (node.description === undefined || typeof node.description === "string")
   );
 }
 

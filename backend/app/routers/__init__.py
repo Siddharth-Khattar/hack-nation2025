@@ -3,7 +3,7 @@ API Routers Initialization
 Registers all API routes with the main FastAPI application.
 """
 from fastapi import APIRouter
-from app.routers import market_routes, vector_routes, relation_routes
+from app.routers import market_routes, vector_routes, relation_routes, name_routes
 
 api_router = APIRouter()
 
@@ -11,3 +11,4 @@ api_router = APIRouter()
 api_router.include_router(market_routes.router)
 api_router.include_router(vector_routes.router)
 api_router.include_router(relation_routes.router)
+api_router.include_router(name_routes.router)

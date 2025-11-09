@@ -366,6 +366,72 @@ Generate topics that represent the key concepts, domains, industries, technologi
         
         return query
     
+    # ==================== NAME SHORTENING ====================
+    
+    async def shorten_market_name(self, market_question: str) -> str:
+        """
+        Shorten a market question/name to exactly 3 words using AI.
+        
+        Args:
+            market_question: The full market question to shorten
+            
+        Returns:
+            Shortened name with exactly 3 words
+            
+        Example:
+            >>> helper = OpenAIHelper()
+            >>> short = await helper.shorten_market_name(
+            ...     "Will Bitcoin reach $100k by 2025?"
+            ... )
+            >>> short
+            "Bitcoin Reaches 100k"
+        """
+        system_message = """You are a name shortening assistant. Your task is to shorten market questions to exactly 3 words that capture the essence of the question.
+
+Rules:
+- Output EXACTLY 3 words (no more, no less)
+- Use the most important keywords from the question
+- Keep proper nouns (names, places, companies) when relevant
+- Make it concise but meaningful
+- Do not include question words like "Will", "Does", "Is" unless essential
+- Return ONLY the 3 words, nothing else
+
+Examples:
+- "Will Bitcoin reach $100k by 2025?" -> "Bitcoin Reaches 100k"
+- "Donald Trump wins 2024 election?" -> "Trump Wins Election"
+- "Tesla stock price above $300?" -> "Tesla Stock Price"
+- "Will there be a recession in 2024?" -> "2024 Recession Prediction"
+"""
+        
+        prompt = f"Shorten this market question to exactly 3 words: {market_question}"
+        
+        try:
+            response = await self.get_chat_response(
+                prompt=prompt,
+                system_message=system_message
+            )
+            
+            # Clean up the response - extract just the words
+            words = response.strip().split()
+            # Take first 3 words if more than 3, pad if less
+            if len(words) >= 3:
+                shortened = " ".join(words[:3])
+            else:
+                # If AI didn't follow instructions, try to extract key words from original
+                important_words = [w for w in market_question.split() if w.lower() not in ['will', 'the', 'a', 'an', 'be', 'is', 'are', 'was', 'were', 'by', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'from']]
+                shortened = " ".join(important_words[:3]) if len(important_words) >= 3 else market_question[:30]
+            
+            return shortened.strip()
+            
+        except Exception as e:
+            logger.error(f"Error shortening market name: {e}")
+            # Fallback: extract first 3 meaningful words
+            words = market_question.split()
+            important_words = [w for w in words if w.lower() not in ['will', 'the', 'a', 'an', 'be', 'is', 'are', 'was', 'were', 'by', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'from']]
+            if len(important_words) >= 3:
+                return " ".join(important_words[:3])
+            return " ".join(words[:3]) if len(words) >= 3 else market_question[:30]
+    
     # ==================== UTILITY METHODS ====================
     
     def get_embedding_dimension(self) -> int:
