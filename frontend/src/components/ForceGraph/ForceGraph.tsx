@@ -490,7 +490,9 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
                   x={node.x}
                   y={node.y - nodeRadius - 4}
                   textAnchor="middle"
-                  fill="#94a3b8"
+                  fill="#ffffff"
+                  stroke="rgba(0, 0, 0, 0.5)"
+                  strokeWidth={0.5}
                   fontSize={10}
                   fontFamily="var(--font-geist-sans), system-ui, sans-serif"
                   style={{

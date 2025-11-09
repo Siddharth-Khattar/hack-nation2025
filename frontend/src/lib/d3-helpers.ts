@@ -22,9 +22,9 @@ export function getNodeColorWithThresholds(
   volatility: number,
   thresholds: VolatilityThresholds
 ): string {
-  // Bottom 40% - white
+  // Bottom 40% - very light red
   if (volatility < thresholds.p40) {
-    return "#ffffff";
+    return "#fef2f2";
   }
 
   // 40th to 60th percentile - very light blue
@@ -50,16 +50,16 @@ export function getNodeColorWithThresholds(
   }
 
   // Top 20% - dark blue
-  return "#1e3a8a";
+  return "#153a9f";
 }
 
 /**
  * Maps a node's volatility value (0-1) to a corresponding theme color.
  * Uses a 4-tier color scale as specified:
- * - < 0.3: very light blue (calm)
- * - 0.3-0.5: light blue
- * - 0.5-0.7: standard blue
- * - > 0.7: dark blue (highly volatile)
+ * - < 0.3: very light red (calm)
+ * - 0.3-0.5: light red
+ * - 0.5-0.7: standard red
+ * - > 0.7: dark red (highly volatile)
  *
  * @param volatility - Value between 0 and 1 representing market volatility
  * @returns CSS color string matching the theme's volatility color scale
@@ -67,15 +67,15 @@ export function getNodeColorWithThresholds(
  */
 export function getNodeColor(volatility: number): string {
   if (volatility < 0.3) {
-    return "#dbeafe"; // very light blue
+    return "#fecaca"; // very light red (red-200)
   }
   if (volatility < 0.5) {
-    return "#93c5fd"; // light blue
+    return "#f87171"; // light red (red-400)
   }
   if (volatility < 0.7) {
-    return "#3b82f6"; // standard blue
+    return "#dc2626"; // standard red (red-600)
   }
-  return "#1e3a8a"; // dark blue
+  return "#991b1b"; // dark red (red-800)
 }
 
 /**
@@ -83,17 +83,18 @@ export function getNodeColor(volatility: number): string {
  * Higher correlation results in thicker lines to emphasize stronger relationships.
  *
  * @param correlation - Value between 0 and 1 representing connection strength
- * @returns Line width in pixels (0.3px to 2.5px range)
+ * @returns Line width in pixels (0.8px to 3.5px range)
  */
 export function getConnectionWidth(correlation: number): number {
-  // Linear mapping: 0 -> 0.3px, 1 -> 2.5px
-  // Reduced thickness for more elegant visualization
-  return 0.3 + correlation * 2.2;
+  // Linear mapping: 0 -> 0.8px, 1 -> 3.5px
+  // Increased thickness for better visibility
+  return 0.8 + correlation * 2.7;
 }
 
 /**
  * Maps a connection's pressure and correlation to an enhanced line thickness.
  * Combines both pressure and correlation for more dramatic visual differences.
+ * Used in cluster highlight view for better visibility.
  *
  * @param correlation - Value between 0 and 1 representing connection strength
  * @param pressure - Value between 0 and 1 representing connection pressure
@@ -103,18 +104,18 @@ export function getEnhancedConnectionWidth(
   correlation: number,
   pressure: number
 ): number {
-  // Base width from correlation (0.2 to 1.5 range)
-  const baseWidth = 0.2 + correlation * 1.3;
+  // Base width from correlation (1.2 to 3.5 range)
+  const baseWidth = 1.2 + correlation * 2.3;
 
-  // Pressure multiplier using exponential scaling (0.5 to 2.0 range)
+  // Pressure multiplier using exponential scaling (0.6 to 2.2 range)
   // Low pressure connections become thinner, high pressure become thicker
-  const pressureMultiplier = 0.5 + 1.5 * Math.pow(pressure, 2);
+  const pressureMultiplier = 0.6 + 1.6 * Math.pow(pressure, 2);
 
   // Combined width with clamping to reasonable range
   const combinedWidth = baseWidth * pressureMultiplier;
 
-  // Clamp to reasonable range (0.1px to 4px)
-  return Math.max(0.1, Math.min(4, combinedWidth));
+  // Clamp to reasonable range (1.0px to 8px)
+  return Math.max(1.0, Math.min(8, combinedWidth));
 }
 
 /**
@@ -134,15 +135,15 @@ export function getConnectionColor(): string {
  * @param connectionCount - Number of direct connections the node has
  * @param maxConnections - Maximum expected connections for normalization (defaults to 20)
  * @param useLogarithmic - Whether to use logarithmic scaling for better distribution (defaults to true)
- * @returns Node radius in pixels (5-11px range, 6px variation)
+ * @returns Node radius in pixels (8-14px range, 6px variation)
  */
 export function getNodeRadius(
   connectionCount: number,
   maxConnections: number = 20,
   useLogarithmic: boolean = true
 ): number {
-  const minRadius = 5;
-  const maxRadius = 11;
+  const minRadius = 8;
+  const maxRadius = 14;
   const radiusRange = maxRadius - minRadius;
 
   let normalizedCount: number;
@@ -158,7 +159,7 @@ export function getNodeRadius(
     normalizedCount = Math.min(connectionCount / maxConnections, 1);
   }
 
-  // Map to radius range: 0 connections = 5px, max connections = 11px
+  // Map to radius range: 0 connections = 8px, max connections = 14px
   // This creates clear visual diversity (6px variation is very noticeable)
   return minRadius + normalizedCount * radiusRange;
 }
@@ -331,4 +332,95 @@ export function getConnectionOpacityByPressure(
   if (range === 0) return 0.9; // Avoid division by zero
   const position = Math.min((pressure - thresholds.p80) / range, 1); // Cap at 1
   return 0.6 + 0.3 * position; // Linear interpolation from 0.6 to 0.9
+}
+
+/**
+ * Converts a hex color string to RGB components.
+ *
+ * @param hex - Hex color string (e.g., "#ffffff" or "ffffff")
+ * @returns RGB object with r, g, b values (0-255) or null if invalid
+ */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  // Remove # if present
+  const cleanHex = hex.replace(/^#/, "");
+
+  // Match 6-character hex format
+  const result = /^([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(cleanHex);
+
+  if (!result) return null;
+
+  return {
+    r: parseInt(result[1], 16),
+    g: parseInt(result[2], 16),
+    b: parseInt(result[3], 16),
+  };
+}
+
+/**
+ * Calculates relative luminance of an RGB color according to WCAG standards.
+ * Used for determining optimal text color contrast against backgrounds.
+ *
+ * @see https://www.w3.org/TR/WCAG20/#relativeluminancedef
+ * @param r - Red component (0-255)
+ * @param g - Green component (0-255)
+ * @param b - Blue component (0-255)
+ * @returns Relative luminance value (0-1)
+ */
+function getRelativeLuminance(r: number, g: number, b: number): number {
+  // Convert 8-bit RGB to 0-1 range and apply sRGB to linear RGB conversion
+  const [rs, gs, bs] = [r, g, b].map((component) => {
+    const c = component / 255;
+    // sRGB to linear RGB transformation
+    return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  });
+
+  // Calculate relative luminance using WCAG formula
+  // Coefficients represent human perception of brightness for each color
+  return 0.2126 * rs + 0.7152 * gs + 0.0722 * bs;
+}
+
+/**
+ * Determines optimal text color (white or dark) for a node based on its background color.
+ * Uses WCAG relative luminance calculation to ensure accessible contrast ratios.
+ *
+ * Algorithm:
+ * 1. Get node background color from volatility
+ * 2. Calculate relative luminance (0 = black, 1 = white)
+ * 3. If luminance > 0.5, use dark text (light background)
+ * 4. Otherwise, use white text (dark background)
+ *
+ * @param volatility - Node volatility value (0-1) used to determine background color
+ * @returns CSS color string for text ("#ffffff" for white, "#1e293b" for dark)
+ */
+export function getNodeTextColor(volatility: number): string {
+  // Get the background color for this node
+  const backgroundColor = getNodeColor(volatility);
+
+  // Handle RGB format (from interpolated colors)
+  if (backgroundColor.startsWith("rgb")) {
+    // Extract RGB values from "rgb(r, g, b)" format
+    const matches = backgroundColor.match(/\d+/g);
+    if (matches && matches.length >= 3) {
+      const r = parseInt(matches[0]);
+      const g = parseInt(matches[1]);
+      const b = parseInt(matches[2]);
+      const luminance = getRelativeLuminance(r, g, b);
+
+      // Threshold of 0.5: lighter backgrounds get dark text, darker backgrounds get white text
+      return luminance > 0.5 ? "#1e293b" : "#ffffff";
+    }
+  }
+
+  // Handle hex format
+  const rgb = hexToRgb(backgroundColor);
+
+  if (!rgb) {
+    // Fallback to white text if color parsing fails
+    return "#ffffff";
+  }
+
+  const luminance = getRelativeLuminance(rgb.r, rgb.g, rgb.b);
+
+  // Threshold of 0.5: lighter backgrounds get dark text, darker backgrounds get white text
+  return luminance > 0.5 ? "#1e293b" : "#ffffff";
 }
