@@ -336,17 +336,18 @@ export function ForceGraph({ data, onZoomControllerCreated, onClusterControllerC
   }, [dimensions.width, dimensions.height, onZoomControllerCreated]);
 
   // Expose cluster controller to parent component
-  // This allows external components (like SearchBar) to programmatically select nodes
+  // This allows external components (like SearchBar, NodeInfoPanel) to programmatically select nodes
   useEffect(() => {
     if (onClusterControllerCreated) {
       const clusterController: ClusterController = {
         selectNode: selectNodeById,
         clearSelection: clearSelectionAndZoom,
+        getSelectedNodeId: () => clusterState.selectedNodeId,
       };
 
       onClusterControllerCreated(clusterController);
     }
-  }, [selectNodeById, clearSelectionAndZoom, onClusterControllerCreated]);
+  }, [selectNodeById, clearSelectionAndZoom, clusterState.selectedNodeId, onClusterControllerCreated]);
 
   const connectionColor = getConnectionColor();
 

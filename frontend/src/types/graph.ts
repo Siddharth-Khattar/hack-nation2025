@@ -148,6 +148,14 @@ export interface ClusterController {
    * Returns the graph to its default unselected state.
    */
   clearSelection: () => void;
+
+  /**
+   * Get the ID of the currently selected node.
+   * Returns null if no node is currently selected.
+   *
+   * @returns The ID of the selected node, or null if no selection
+   */
+  getSelectedNodeId: () => string | null;
 }
 
 /**
